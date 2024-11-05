@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Playlist_Mix_Player
 {
@@ -10,6 +11,22 @@ namespace Playlist_Mix_Player
 
     public class Program
     {
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+
+        [DllImport("ntdll.dll")]
+        private static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass, ref PROCESS_BASIC_INFORMATION processInformation, uint processInformationLength, out uint returnLength);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PROCESS_BASIC_INFORMATION
+        {
+            public IntPtr Reserved1;
+            public IntPtr PebBaseAddress;
+            public IntPtr Reserved2;
+            public IntPtr UniqueProcessId;
+            public IntPtr InheritedFromUniqueProcessId;
+        }
+
         public static void Main(string[] args)
         {
             EMixChoiceOption choiceOption = EMixChoiceOption.Link;
@@ -70,52 +87,34 @@ namespace Playlist_Mix_Player
 
         private static string? FindBatchFilePathFromInvoker()
         {
-            string? parentProcessName = GetParentProcessFileName();
-            if (!string.IsNullOrEmpty(parentProcessName) && parentProcessName.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            int parentPid = GetParentProcessId();
+            if (parentPid > 0)
             {
-                return parentProcessName;
-            }
-            return null;
-        }
-
-        private static string? GetParentProcessFileName()
-        {
-            try
-            {
-                using (Process currentProcess = Process.GetCurrentProcess())
+                try
                 {
-                    int parentPid = GetParentProcessId(currentProcess.Id);
-                    if (parentPid > 0)
+                    using (Process parentProcess = Process.GetProcessById(parentPid))
                     {
-                        using (Process parentProcess = Process.GetProcessById(parentPid))
+                        if (parentProcess.MainModule?.FileName != null && parentProcess.MainModule.FileName.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
                         {
-                            return parentProcess?.MainModule?.FileName;
+                            return parentProcess.MainModule.FileName;
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error finding parent process: " + ex.Message);
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error finding parent process: " + ex.Message);
+                }
             }
             return null;
         }
 
-        private static int GetParentProcessId(int pid)
+        private static int GetParentProcessId()
         {
-            try
+            PROCESS_BASIC_INFORMATION pbi = new();
+            int status = NtQueryInformationProcess(GetCurrentProcess(), 0, ref pbi, (uint)Marshal.SizeOf(typeof(PROCESS_BASIC_INFORMATION)), out uint returnLength);
+            if (status == 0)
             {
-                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT * FROM Win32_Process WHERE ProcessId = " + pid))
-                {
-                    foreach (var obj in searcher.Get())
-                    {
-                        return Convert.ToInt32(obj["ParentProcessId"]);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error finding parent process details: " + ex.Message);
+                return (int)pbi.InheritedFromUniqueProcessId;
             }
             return -1;
         }
