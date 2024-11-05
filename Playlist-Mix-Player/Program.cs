@@ -44,7 +44,7 @@ namespace Playlist_Mix_Player
                 }
             }
 
-            string batFilePath = FindBatchFilePathFromInvoker();
+            string batFilePath = GetInvokingBatchFilePath();
             if (string.IsNullOrEmpty(batFilePath) || !File.Exists(batFilePath))
             {
                 Console.WriteLine("Error: Batch file not found.");
@@ -85,30 +85,40 @@ namespace Playlist_Mix_Player
             }
         }
 
-        private static string? FindBatchFilePathFromInvoker()
+        private static string GetInvokingBatchFilePath()
         {
-            int parentPid = GetParentProcessId();
-            if (parentPid > 0)
+            string? parentProcessPath = GetParentProcessFileName();
+            if (!string.IsNullOrEmpty(parentProcessPath) && parentProcessPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    using (Process parentProcess = Process.GetProcessById(parentPid))
-                    {
-                        if (parentProcess.MainModule?.FileName != null && parentProcess.MainModule.FileName.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return parentProcess.MainModule.FileName;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Error finding parent process: " + ex.Message);
-                }
+                return parentProcessPath;
             }
             return null;
         }
 
-        private static int GetParentProcessId()
+        private static string? GetParentProcessFileName()
+        {
+            try
+            {
+                using (Process currentProcess = Process.GetCurrentProcess())
+                {
+                    int parentPid = GetParentProcessId(currentProcess.Id);
+                    if (parentPid > 0)
+                    {
+                        using (Process parentProcess = Process.GetProcessById(parentPid))
+                        {
+                            return parentProcess?.MainModule?.FileName;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error finding parent process: " + ex.Message);
+            }
+            return null;
+        }
+
+        private static int GetParentProcessId(int pid)
         {
             PROCESS_BASIC_INFORMATION pbi = new();
             int status = NtQueryInformationProcess(GetCurrentProcess(), 0, ref pbi, (uint)Marshal.SizeOf(typeof(PROCESS_BASIC_INFORMATION)), out uint returnLength);
@@ -153,9 +163,9 @@ namespace Playlist_Mix_Player
         {
             foreach (string directory in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.AllDirectories))
             {
-                foreach (string file in Directory.GetFiles(directory, "!!rnd_mix.bat", SearchOption.TopDirectoryOnly))
+                foreach (string file in Directory.GetFiles(directory, "*.bat", SearchOption.TopDirectoryOnly))
                 {
-                    if (directory.EndsWith(playlistName, StringComparison.OrdinalIgnoreCase))
+                    if (file.Contains(playlistName, StringComparison.OrdinalIgnoreCase))
                     {
                         return file;
                     }
