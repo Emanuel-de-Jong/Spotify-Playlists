@@ -125,7 +125,7 @@ namespace Playlist_Mix_Player
             foreach (string line in File.ReadLines(filePath))
             {
                 string trimmedLine = line.Trim();
-                if (trimmedLine == "GOTO :PROGRAM_START")
+                if (trimmedLine == "GOTO PROGRAM_START")
                 {
                     startReading = true;
                     continue;
