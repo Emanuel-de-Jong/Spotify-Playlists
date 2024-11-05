@@ -1,5 +1,5 @@
 @echo off
-setx MIX_PLAYER_PATH "%cd%" /M
+setx PLAYLIST_MIX_PLAYER_PATH "%cd%"
 
-echo MIX_PLAYER_PATH has been set to %cd%
+echo PLAYLIST_MIX_PLAYER_PATH has been set to %cd%
 pause
