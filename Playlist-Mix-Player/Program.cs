@@ -56,6 +56,10 @@ namespace Playlist_Mix_Player
                         ProcessBatchFile(playlistFilePath, links, playlists);
                         SelectRandomLink(links);
                     }
+                    else
+                    {
+                        Console.WriteLine("Error: Playlist file not found for the selected playlist.");
+                    }
                 }
                 else
                 {
@@ -80,37 +84,40 @@ namespace Playlist_Mix_Player
             {
                 using (Process currentProcess = Process.GetCurrentProcess())
                 {
-                    int parentPid = 0;
-                    using (Process parentProcess = GetParentProcess(currentProcess.Id, out parentPid))
+                    int parentPid = GetParentProcessId(currentProcess.Id);
+                    if (parentPid > 0)
                     {
-                        return parentProcess?.MainModule?.FileName;
+                        using (Process parentProcess = Process.GetProcessById(parentPid))
+                        {
+                            return parentProcess?.MainModule?.FileName;
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Error finding parent process: " + ex.Message);
-                return null;
             }
+            return null;
         }
 
-        private static Process GetParentProcess(int pid, out int parentPid)
+        private static int GetParentProcessId(int pid)
         {
-            parentPid = 0;
             try
             {
-                using (ManagementObject mo = new ManagementObject($"win32_process.handle='{pid}'"))
+                using (var searcher = new System.Management.ManagementObjectSearcher("SELECT * FROM Win32_Process WHERE ProcessId = " + pid))
                 {
-                    mo.Get();
-                    parentPid = Convert.ToInt32(mo["ParentProcessId"]);
-                    return Process.GetProcessById(parentPid);
+                    foreach (var obj in searcher.Get())
+                    {
+                        return Convert.ToInt32(obj["ParentProcessId"]);
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Error finding parent process details: " + ex.Message);
-                return null;
             }
+            return -1;
         }
 
         private static void ProcessBatchFile(string filePath, List<string> links, List<string> playlists)
@@ -176,6 +183,10 @@ namespace Playlist_Mix_Player
             else if (selectedLink.Contains("spotify.com"))
             {
                 OpenSpotifyLink(selectedLink);
+            }
+            else
+            {
+                Console.WriteLine("Error: Unsupported link format.");
             }
         }
 
