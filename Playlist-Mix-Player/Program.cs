@@ -165,7 +165,7 @@ namespace Playlist_Mix_Player
             {
                 foreach (string file in Directory.GetFiles(directory, "*.bat", SearchOption.TopDirectoryOnly))
                 {
-                    if (file.Contains(playlistName, StringComparison.OrdinalIgnoreCase))
+                    if (Path.GetFileNameWithoutExtension(file).Equals(playlistName, StringComparison.OrdinalIgnoreCase))
                     {
                         return file;
                     }
