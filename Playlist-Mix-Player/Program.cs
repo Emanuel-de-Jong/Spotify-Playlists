@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace Playlist_Mix_Player
 {
@@ -11,133 +10,66 @@ namespace Playlist_Mix_Player
 
     public class Program
     {
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetCurrentProcess();
-
-        [DllImport("ntdll.dll")]
-        private static extern int NtQueryInformationProcess(IntPtr processHandle, int processInformationClass, ref PROCESS_BASIC_INFORMATION processInformation, uint processInformationLength, out uint returnLength);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct PROCESS_BASIC_INFORMATION
-        {
-            public IntPtr Reserved1;
-            public IntPtr PebBaseAddress;
-            public IntPtr Reserved2;
-            public IntPtr UniqueProcessId;
-            public IntPtr InheritedFromUniqueProcessId;
-        }
+        private string batchFileName = "!!rnd_mix";
+        private EMixChoiceOption mixChoiceOption = EMixChoiceOption.Link;
+        private List<List<string>> linksByPlaylist = [];
 
         public static void Main(string[] args)
         {
-            EMixChoiceOption choiceOption = EMixChoiceOption.Link;
+            new Program(args);
+        }
 
-            if (args.Length >= 1)
+        public Program(string[] args)
+        {
+            if (args.Length > 1)
             {
-                if (int.TryParse(args[0], out int choiceInt) && Enum.IsDefined(typeof(EMixChoiceOption), choiceInt))
+                batchFileName = args[0];
+            }
+
+            if (args.Length > 2)
+            {
+                if (int.TryParse(args[1], out int choiceInt) && Enum.IsDefined(typeof(EMixChoiceOption), choiceInt))
                 {
-                    choiceOption = (EMixChoiceOption)choiceInt;
+                    mixChoiceOption = (EMixChoiceOption)choiceInt;
                 }
-                else if (!Enum.TryParse(args[0], true, out choiceOption))
+                else if (!Enum.TryParse(args[1], true, out mixChoiceOption))
                 {
                     Console.WriteLine("Error: Invalid choice option. Use '0' for Link or '1' for Playlist, or the corresponding names.");
                     return;
                 }
             }
 
-            string batFilePath = GetInvokingBatchFilePath();
-            if (string.IsNullOrEmpty(batFilePath) || !File.Exists(batFilePath))
+            string batFilePath = $"{Environment.CurrentDirectory}{Path.DirectorySeparatorChar}{batchFileName}.bat";
+            if (!File.Exists(batFilePath))
             {
                 Console.WriteLine("Error: Batch file not found.");
                 return;
             }
 
-            List<string> links = new();
-            List<string> playlists = new();
-            ProcessBatchFile(batFilePath, links, playlists);
-
-            if (choiceOption == EMixChoiceOption.Link)
+            List<string> playlistNames = ProcessBatchFile(batFilePath);
+            if (playlistNames.Count > 0)
             {
-                SelectRandomLink(links);
-            }
-            else if (choiceOption == EMixChoiceOption.Playlist)
-            {
-                if (playlists.Count > 0)
+                foreach (string playlistName in playlistNames)
                 {
-                    Random random = new();
-                    string selectedPlaylist = playlists[random.Next(playlists.Count)];
-                    string playlistFilePath = FindPlaylistFilePath(selectedPlaylist);
-                    if (!string.IsNullOrEmpty(playlistFilePath))
-                    {
-                        links.Clear();
-                        playlists.Clear();
-                        ProcessBatchFile(playlistFilePath, links, playlists);
-                        SelectRandomLink(links);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Error: Playlist file not found for the selected playlist.");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("No playlists available with links.");
+                    batFilePath = FindPlaylistBatFilePath(playlistName);
+                    ProcessBatchFile(batFilePath);
                 }
             }
+
+            PlayRandomLink();
         }
 
-        private static string GetInvokingBatchFilePath()
+        private List<string> ProcessBatchFile(string filePath)
         {
-            string? parentProcessPath = GetParentProcessFileName();
-            if (!string.IsNullOrEmpty(parentProcessPath) && parentProcessPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
-            {
-                return parentProcessPath;
-            }
-            return null;
-        }
+            List<string> playlistNames = [];
 
-        private static string? GetParentProcessFileName()
-        {
-            try
-            {
-                using (Process currentProcess = Process.GetCurrentProcess())
-                {
-                    int parentPid = GetParentProcessId(currentProcess.Id);
-                    if (parentPid > 0)
-                    {
-                        using (Process parentProcess = Process.GetProcessById(parentPid))
-                        {
-                            return parentProcess?.MainModule?.FileName;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error finding parent process: " + ex.Message);
-            }
-            return null;
-        }
+            int linksId = linksByPlaylist.Count;
 
-        private static int GetParentProcessId(int pid)
-        {
-            PROCESS_BASIC_INFORMATION pbi = new();
-            int status = NtQueryInformationProcess(GetCurrentProcess(), 0, ref pbi, (uint)Marshal.SizeOf(typeof(PROCESS_BASIC_INFORMATION)), out uint returnLength);
-            if (status == 0)
-            {
-                return (int)pbi.InheritedFromUniqueProcessId;
-            }
-            return -1;
-        }
-
-        private static void ProcessBatchFile(string filePath, List<string> links, List<string> playlists)
-        {
-            bool startReading = false;
             foreach (string line in File.ReadLines(filePath))
             {
                 string trimmedLine = line.Trim();
                 if (trimmedLine == "GOTO PROGRAM_START")
                 {
-                    startReading = true;
                     continue;
                 }
                 if (trimmedLine == ":PROGRAM_START")
@@ -145,44 +77,62 @@ namespace Playlist_Mix_Player
                     break;
                 }
 
-                if (startReading)
+                if (trimmedLine.Contains("http"))
                 {
-                    if (trimmedLine.Contains("http"))
+                    if (linksId == linksByPlaylist.Count)
                     {
-                        links.Add(trimmedLine);
+                        linksByPlaylist.Add([]);
                     }
-                    else if (!string.IsNullOrEmpty(trimmedLine))
-                    {
-                        playlists.Add(trimmedLine);
-                    }
+
+                    linksByPlaylist[linksId].Add(trimmedLine);
+                }
+                else if (!string.IsNullOrEmpty(trimmedLine))
+                {
+                    playlistNames.Add(trimmedLine);
                 }
             }
+
+            return playlistNames;
         }
 
-        private static string? FindPlaylistFilePath(string playlistName)
+        private string? FindPlaylistBatFilePath(string playlistName)
         {
-            foreach (string directory in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.AllDirectories))
+            foreach (string dirPath in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.AllDirectories))
             {
-                foreach (string file in Directory.GetFiles(directory, "*.bat", SearchOption.TopDirectoryOnly))
+                string dirName = Path.GetFileName(dirPath);
+                if (dirName.StartsWith("!!") || dirName.StartsWith("zz"))
                 {
-                    if (Path.GetFileNameWithoutExtension(file).Equals(playlistName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return file;
-                    }
+                    continue;
+                }
+
+                if (dirName.Equals(playlistName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"{dirPath}{Path.DirectorySeparatorChar}{batchFileName}.bat";
                 }
             }
+
             return null;
         }
 
-        private static void SelectRandomLink(List<string> links)
+        private void PlayRandomLink()
         {
-            if (links.Count == 0)
+            if (linksByPlaylist.Count == 0)
             {
                 Console.WriteLine("No links found in the batch file.");
                 return;
             }
 
             Random random = new();
+            List<string>? links = null;
+            if (mixChoiceOption == EMixChoiceOption.Link)
+            {
+                links = linksByPlaylist.SelectMany(x => x).ToList();
+            }
+            else if (mixChoiceOption == EMixChoiceOption.Playlist)
+            {
+                links = linksByPlaylist[random.Next(linksByPlaylist.Count)];
+            }
+
             string selectedLink = links[random.Next(links.Count)];
 
             if (selectedLink.Contains("youtube.com"))
@@ -199,7 +149,7 @@ namespace Playlist_Mix_Player
             }
         }
 
-        private static void OpenYouTubeLink(string url)
+        private void OpenYouTubeLink(string url)
         {
             try
             {
@@ -215,7 +165,7 @@ namespace Playlist_Mix_Player
             }
         }
 
-        private static void OpenSpotifyLink(string url)
+        private void OpenSpotifyLink(string url)
         {
             try
             {
