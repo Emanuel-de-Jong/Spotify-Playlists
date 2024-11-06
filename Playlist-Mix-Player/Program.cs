@@ -138,37 +138,18 @@ namespace Playlist_Mix_Player
 
             links = links.Distinct().ToList();
 
-            string selectedLink = links[random.Next(links.Count)];
+            string link = links[random.Next(links.Count)];
 
-            if (selectedLink.Contains("youtube.com"))
+            string fileName = link;
+            if (link.Contains("spotify.com"))
             {
-                OpenYouTubeLink(selectedLink);
+                string playlistId = new Uri(link).Segments.Last().Split('?')[0];
+                fileName = $"spotify:playlist:{playlistId}";
             }
-            else if (selectedLink.Contains("spotify.com"))
-            {
-                OpenSpotifyLink(selectedLink);
-            }
-            else
-            {
-                throw new Exception("Unsupported link format. Use a Youtube video or Spotify playlist link.");
-            }
-        }
 
-        private void OpenYouTubeLink(string url)
-        {
             Process.Start(new ProcessStartInfo
             {
-                FileName = url,
-                UseShellExecute = true
-            });
-        }
-
-        private void OpenSpotifyLink(string url)
-        {
-            string playlistId = new Uri(url).Segments.Last().Split('?')[0];
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = $"spotify:playlist:{playlistId}",
+                FileName = fileName,
                 UseShellExecute = true
             });
         }
