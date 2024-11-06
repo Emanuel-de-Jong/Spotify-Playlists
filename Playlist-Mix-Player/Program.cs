@@ -10,7 +10,8 @@ namespace Playlist_Mix_Player
 
     public class Program
     {
-        private string batchFileName = "!!rnd_mix";
+        private const string DEFAULT_BATCH_FILE_NAME = "!!rnd_mix";
+
         private EMixChoiceOption mixChoiceOption = EMixChoiceOption.Link;
         private List<List<string>> linksByPlaylist = [];
 
@@ -21,6 +22,7 @@ namespace Playlist_Mix_Player
 
         public void Run(string[] args)
         {
+            string batchFileName = DEFAULT_BATCH_FILE_NAME;
             if (args.Length > 0)
             {
                 batchFileName = args[0];
@@ -34,73 +36,56 @@ namespace Playlist_Mix_Player
                 }
                 else if (!Enum.TryParse(args[1], true, out mixChoiceOption))
                 {
-                    Console.WriteLine("Error: Invalid choice option. Use '0' for Link or '1' for Playlist, or the corresponding names.");
-                    return;
+                    throw new Exception("Invalid mix choice option. Use '0' for Link or '1' for Playlist.");
                 }
             }
 
-            string batFilePath = $"{Environment.CurrentDirectory}{Path.DirectorySeparatorChar}{batchFileName}.bat";
-            if (!File.Exists(batFilePath))
-            {
-                Console.WriteLine("Error: Batch file not found.");
-                return;
-            }
+            ProcessBatchFile(batchFileName);
 
-            List<string> playlistNames = ProcessBatchFile(batFilePath);
-            if (playlistNames.Count > 0)
+            if (args.Length > 0)
             {
-                foreach (string playlistName in playlistNames)
+                foreach (string playlistPath in GetPlaylistPaths(batchFileName))
                 {
-                    batFilePath = FindPlaylistBatFilePath(playlistName);
-                    if (batFilePath != null)
-                    {
-                        ProcessBatchFile(batFilePath);
-                    }
+                    ProcessBatchFile(DEFAULT_BATCH_FILE_NAME, playlistPath);
                 }
             }
 
             PlayRandomLink();
         }
 
-        private List<string> ProcessBatchFile(string filePath)
+        private void ProcessBatchFile(string batchFileName)
         {
-            List<string> playlistNames = [];
+            ProcessBatchFile(batchFileName, Environment.CurrentDirectory);
+        }
+
+        private void ProcessBatchFile(string batchFileName, string basePath)
+        {
+            string batchFilePath = $"{basePath}{Path.DirectorySeparatorChar}{batchFileName}.bat";
+            if (!System.IO.File.Exists(batchFilePath))
+            {
+                throw new Exception($"{batchFilePath} not found.");
+            }
 
             int linksId = linksByPlaylist.Count;
-
-            foreach (string line in File.ReadLines(filePath))
+            foreach (string line in System.IO.File.ReadLines(batchFilePath))
             {
-                string trimmedLine = line.Trim();
-                if (trimmedLine == "GOTO PROGRAM_START")
-                {
-                    continue;
-                }
-                if (trimmedLine == ":PROGRAM_START")
-                {
-                    break;
-                }
-
-                if (trimmedLine.Contains("http"))
+                if (line.Contains("http"))
                 {
                     if (linksId == linksByPlaylist.Count)
                     {
                         linksByPlaylist.Add(new List<string>());
                     }
 
-                    linksByPlaylist[linksId].Add(trimmedLine);
-                }
-                else if (!string.IsNullOrEmpty(trimmedLine))
-                {
-                    playlistNames.Add(trimmedLine);
+                    linksByPlaylist[linksId].Add(line.Trim());
                 }
             }
-
-            return playlistNames;
         }
 
-        private string? FindPlaylistBatFilePath(string playlistName)
+        private List<string> GetPlaylistPaths(string tag)
         {
-            foreach (string dirPath in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.AllDirectories))
+            List<string> playlistPaths = [];
+
+            foreach (string dirPath in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.TopDirectoryOnly))
             {
                 string dirName = Path.GetFileName(dirPath);
                 if (dirName.StartsWith("!!") || dirName.StartsWith("zz"))
@@ -108,21 +93,30 @@ namespace Playlist_Mix_Player
                     continue;
                 }
 
-                if (dirName.Equals(playlistName, StringComparison.OrdinalIgnoreCase))
+                foreach (string playlistPath in Directory.GetDirectories(dirPath, "*", SearchOption.TopDirectoryOnly))
                 {
-                    return $"{dirPath}{Path.DirectorySeparatorChar}{batchFileName}.bat";
+                    string? mp3Path = Directory.GetFiles(playlistPath, "*.mp3").FirstOrDefault();
+                    if (mp3Path == null)
+                    {
+                        continue;
+                    }
+
+                    TagLib.File mp3File = TagLib.File.Create(mp3Path);
+                    if (mp3File.Tag.Genres.Contains(tag))
+                    {
+                        playlistPaths.Add(playlistPath);
+                    }
                 }
             }
 
-            return null;
+            return playlistPaths;
         }
 
         private void PlayRandomLink()
         {
             if (linksByPlaylist.Count == 0)
             {
-                Console.WriteLine("No links found in the batch file.");
-                return;
+                throw new Exception("No links in any batch file.");
             }
 
             Random random = new();
@@ -138,8 +132,7 @@ namespace Playlist_Mix_Player
 
             if (links == null || links.Count == 0)
             {
-                Console.WriteLine("No links found in the batch file.");
-                return;
+                throw new Exception("No links.");
             }
 
             string selectedLink = links[random.Next(links.Count)];
@@ -154,41 +147,27 @@ namespace Playlist_Mix_Player
             }
             else
             {
-                Console.WriteLine("Error: Unsupported link format.");
+                throw new Exception("Unsupported link format. Use a Youtube video or Spotify playlist link.");
             }
         }
 
         private void OpenYouTubeLink(string url)
         {
-            try
+            Process.Start(new ProcessStartInfo
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error opening YouTube link: " + ex.Message);
-            }
+                FileName = url,
+                UseShellExecute = true
+            });
         }
 
         private void OpenSpotifyLink(string url)
         {
-            try
+            Process.Start(new ProcessStartInfo
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "spotify",
-                    Arguments = url,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error opening Spotify link: " + ex.Message);
-            }
+                FileName = "spotify",
+                Arguments = url,
+                UseShellExecute = true
+            });
         }
     }
 }
