@@ -85,7 +85,8 @@ namespace Playlist_Mix_Player
         {
             List<string> playlistPaths = [];
 
-            foreach (string dirPath in Directory.GetDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.TopDirectoryOnly))
+            string rootPath = Directory.GetParent(AppContext.BaseDirectory)?.Parent?.FullName;
+            foreach (string dirPath in Directory.GetDirectories(rootPath, "*", SearchOption.TopDirectoryOnly))
             {
                 string dirName = Path.GetFileName(dirPath);
                 if (dirName.StartsWith("!!") || dirName.StartsWith("zz"))
@@ -162,10 +163,10 @@ namespace Playlist_Mix_Player
 
         private void OpenSpotifyLink(string url)
         {
+            string playlistId = new Uri(url).Segments.Last().Split('?')[0];
             Process.Start(new ProcessStartInfo
             {
-                FileName = "spotify",
-                Arguments = url,
+                FileName = $"spotify:playlist:{playlistId}",
                 UseShellExecute = true
             });
         }
