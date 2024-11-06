@@ -16,17 +16,17 @@ namespace Playlist_Mix_Player
 
         public static void Main(string[] args)
         {
-            new Program(args);
+            new Program().Run(args);
         }
 
-        public Program(string[] args)
+        public void Run(string[] args)
         {
-            if (args.Length > 1)
+            if (args.Length > 0)
             {
                 batchFileName = args[0];
             }
 
-            if (args.Length > 2)
+            if (args.Length > 1)
             {
                 if (int.TryParse(args[1], out int choiceInt) && Enum.IsDefined(typeof(EMixChoiceOption), choiceInt))
                 {
@@ -52,7 +52,10 @@ namespace Playlist_Mix_Player
                 foreach (string playlistName in playlistNames)
                 {
                     batFilePath = FindPlaylistBatFilePath(playlistName);
-                    ProcessBatchFile(batFilePath);
+                    if (batFilePath != null)
+                    {
+                        ProcessBatchFile(batFilePath);
+                    }
                 }
             }
 
@@ -81,7 +84,7 @@ namespace Playlist_Mix_Player
                 {
                     if (linksId == linksByPlaylist.Count)
                     {
-                        linksByPlaylist.Add([]);
+                        linksByPlaylist.Add(new List<string>());
                     }
 
                     linksByPlaylist[linksId].Add(trimmedLine);
@@ -131,6 +134,12 @@ namespace Playlist_Mix_Player
             else if (mixChoiceOption == EMixChoiceOption.Playlist)
             {
                 links = linksByPlaylist[random.Next(linksByPlaylist.Count)];
+            }
+
+            if (links == null || links.Count == 0)
+            {
+                Console.WriteLine("No links found in the batch file.");
+                return;
             }
 
             string selectedLink = links[random.Next(links.Count)];
