@@ -136,6 +136,8 @@ namespace Playlist_Mix_Player
                 throw new Exception("No links.");
             }
 
+            links = links.Distinct().ToList();
+
             string selectedLink = links[random.Next(links.Count)];
 
             if (selectedLink.Contains("youtube.com"))
