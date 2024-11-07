@@ -6,10 +6,13 @@
     <RootNamespace>Add_Link_Info</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>39907d77-0fcf-47e3-a35d-11cf0e2b4573</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Apis" Version="1.68.0" />
+    <PackageReference Include="Google.Apis.YouTube.v3" Version="1.68.0.3582" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="6.0.1" />
   </ItemGroup>
 
 </Project>
