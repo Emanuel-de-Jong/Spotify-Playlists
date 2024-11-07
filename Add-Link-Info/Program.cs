@@ -15,7 +15,7 @@ namespace Add_Link_Info
         {
             IConfigurationRoot appSettings = new ConfigurationBuilder()
                 .SetBasePath(AppContext.BaseDirectory)
-                .AddJsonFile("appsettings.json")
+                .AddJsonFile("Add-Link-Info-Config.json")
                 .Build();
 
             ApiKey = appSettings["YoutubeApiKey"];

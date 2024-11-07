@@ -6,9 +6,6 @@
 		<RootNamespace>Add_Link_Info</RootNamespace>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
 		<PublishSingleFile>true</PublishSingleFile>
 		<SelfContained>false</SelfContained>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -23,7 +20,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="appsettings.json">
+		<None Update="Add-Link-Info-Config.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
