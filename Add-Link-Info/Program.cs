@@ -14,11 +14,12 @@ namespace Add_Link_Info
 
         private static void Main(string[] args)
         {
-            IConfigurationRoot config = new ConfigurationBuilder()
-                .AddUserSecrets<Program>()
+            IConfigurationRoot appSettings = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json")
                 .Build();
 
-            ApiKey = config["YoutubeApiKey"];
+            ApiKey = appSettings["YoutubeApiKey"];
 
             new Program().Run().GetAwaiter().GetResult();
         }
