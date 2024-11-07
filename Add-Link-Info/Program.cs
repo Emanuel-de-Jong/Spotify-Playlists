@@ -7,7 +7,6 @@ namespace Add_Link_Info
 {
     public class Program
     {
-        private static readonly string ROOT_PATH = Path.Combine("..", "..", "KBOT's-Mixes");
         private static string ApiKey;
 
         private YouTubeService? ytService;
@@ -39,7 +38,8 @@ namespace Add_Link_Info
 
         private async Task ProcessBatchFiles()
         {
-            foreach (string filePath in Directory.GetFiles(ROOT_PATH, "*.bat", SearchOption.AllDirectories))
+            string rootPath = Directory.GetParent(AppContext.BaseDirectory)?.Parent?.FullName;
+            foreach (string filePath in Directory.GetFiles(rootPath, "*.bat", SearchOption.AllDirectories))
             {
                 string[] lines = await File.ReadAllLinesAsync(filePath);
                 bool isFileModified = false;
