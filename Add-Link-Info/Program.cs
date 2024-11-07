@@ -2,14 +2,15 @@
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.Extensions.Configuration;
-using System.Text.RegularExpressions;
 
 namespace Add_Link_Info
 {
     public class Program
     {
-        private static readonly string BaseDirectory = Path.Combine("..", "..", "KBOT's-Mixes");
+        private static readonly string ROOT_PATH = Path.Combine("..", "..", "KBOT's-Mixes");
         private static string ApiKey;
+
+        private YouTubeService? ytService;
 
         private static void Main(string[] args)
         {
@@ -19,89 +20,83 @@ namespace Add_Link_Info
 
             ApiKey = config["YoutubeApiKey"];
 
-            new Program().Run(args).GetAwaiter().GetResult();
+            new Program().Run().GetAwaiter().GetResult();
         }
 
-        private async Task Run(string[] args)
+        private async Task Run()
         {
+            ytService = new YouTubeService(new BaseClientService.Initializer
+            {
+                ApplicationName = "Music-Playlist",
+                ApiKey = ApiKey
+            });
+
             Console.WriteLine("Starting to process batch files...");
-            await ProcessBatchFiles(BaseDirectory);
+            await ProcessBatchFiles();
             Console.WriteLine("Processing complete.");
         }
 
-        private async Task ProcessBatchFiles(string directory)
+        private async Task ProcessBatchFiles()
         {
-            foreach (string file in Directory.GetFiles(directory, "*.bat", SearchOption.AllDirectories))
+            foreach (string filePath in Directory.GetFiles(ROOT_PATH, "*.bat", SearchOption.AllDirectories))
             {
-                string[] lines = await File.ReadAllLinesAsync(file);
-                bool fileModified = false;
+                string[] lines = await File.ReadAllLinesAsync(filePath);
+                bool isFileModified = false;
 
                 for (int i = 0; i < lines.Length; i++)
                 {
                     string line = lines[i];
-                    if (IsYoutubeLink(line) && !HasInfo(line))
+                    if (line.Contains("youtube.com") || line.Contains("youtu.be") && !line.StartsWith('`'))
                     {
-                        Video video = await GetYoutubeVideo(GetYoutubeId(line));
-                        if (video != null)
+                        string? videoId = GetVideoId(line);
+                        if (videoId == null)
                         {
-                            lines[i] = $"`[{video.Snippet.ChannelTitle}] {video.Snippet.Title}` {line}";
-                            fileModified = true;
+                            continue;
                         }
+
+                        Video? video = await GetYoutubeVideo(videoId);
+                        if (video == null)
+                        {
+                            continue;
+                        }
+
+                        lines[i] = $"`[{video.Snippet.ChannelTitle}] {video.Snippet.Title}` {line}";
+                        isFileModified = true;
                     }
                 }
 
-                if (fileModified)
+                if (isFileModified)
                 {
-                    await File.WriteAllLinesAsync(file, lines);
-                    Console.WriteLine($"Updated file: {file}");
+                    await File.WriteAllLinesAsync(filePath, lines);
+                    Console.WriteLine($"Updated file: {filePath}");
                 }
             }
         }
 
-        private bool IsYoutubeLink(string line)
+        private string? GetVideoId(string url)
         {
-            return line.Contains("youtube.com") || line.Contains("youtu.be");
-        }
-
-        private bool HasInfo(string line)
-        {
-            return line.StartsWith("`");
-        }
-
-        private string GetYoutubeId(string url)
-        {
-            Match match = Regex.Match(url, @"(?:youtu\.be/|youtube\.com.*(?:v=|embed/|v/|shorts/|watch\?v=))([^"]{ 11})");
-            return match.Success ? match.Groups[1].Value : string.Empty;
-        }
-
-        private async Task<Video> GetYoutubeVideo(string videoId)
-        {
-            if (string.IsNullOrEmpty(videoId))
+            if (url.Contains("youtube.com"))
             {
-                return null;
+                return url.Split("v=")[1].Split("&")[0];
             }
 
-            try
+            if (url.Contains("youtu.be"))
             {
-                YouTubeService youtubeService = new(new BaseClientService.Initializer
-                {
-                    ApiKey = ApiKey,
-                    ApplicationName = this.GetType().ToString()
-                });
-
-                VideosResource.ListRequest request = youtubeService.Videos.List("snippet");
-                request.Id = videoId;
-
-                VideoListResponse response = await request.ExecuteAsync();
-
-                if (response.Items.Count > 0)
-                {
-                    return response.Items[0];
-                }
+                return url.Split("/").Last().Split("?")[0];
             }
-            catch (Exception ex)
+
+            return null;
+        }
+
+        private async Task<Video?> GetYoutubeVideo(string videoId)
+        {
+            VideosResource.ListRequest request = ytService.Videos.List("snippet");
+            request.Id = videoId;
+
+            VideoListResponse response = await request.ExecuteAsync();
+            if (response.Items.Count > 0)
             {
-                Console.WriteLine($"Error fetching data for video ID {videoId}: {ex.Message}");
+                return response.Items[0];
             }
 
             return null;
