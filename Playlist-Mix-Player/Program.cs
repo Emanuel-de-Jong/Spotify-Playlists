@@ -71,12 +71,14 @@ namespace Playlist_Mix_Player
             {
                 if (line.Contains("http"))
                 {
+                    string link = line.Split("`").Last().Trim();
+
                     if (linksId == linksByPlaylist.Count)
                     {
                         linksByPlaylist.Add(new List<string>());
                     }
 
-                    linksByPlaylist[linksId].Add(line.Trim());
+                    linksByPlaylist[linksId].Add(link);
                 }
             }
         }
