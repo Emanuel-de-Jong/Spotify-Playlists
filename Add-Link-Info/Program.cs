@@ -1,15 +1,19 @@
 ﻿using Google.Apis.Services;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
+using SpotifyAPI.Web;
 using Microsoft.Extensions.Configuration;
 
 namespace Add_Link_Info
 {
     public class Program
     {
-        private static string ApiKey;
+        private static string YoutubeApiKey;
+        private static string SpotifyClientId;
+        private static string SpotifyClientSecret;
 
-        private YouTubeService? ytService;
+        private YouTubeService? youtubeService;
+        private SpotifyClient? spotifyClient;
 
         private static void Main(string[] args)
         {
@@ -18,18 +22,25 @@ namespace Add_Link_Info
                 .AddJsonFile("Add-Link-Info-Config.json")
                 .Build();
 
-            ApiKey = appSettings["YoutubeApiKey"];
+            YoutubeApiKey = appSettings["YoutubeApiKey"];
+            SpotifyClientId = appSettings["SpotifyClientId"];
+            SpotifyClientSecret = appSettings["SpotifyClientSecret"];
 
             new Program().Run().GetAwaiter().GetResult();
         }
 
         private async Task Run()
         {
-            ytService = new YouTubeService(new BaseClientService.Initializer
+            youtubeService = new YouTubeService(new BaseClientService.Initializer
             {
                 ApplicationName = "Music-Playlist",
-                ApiKey = ApiKey
+                ApiKey = YoutubeApiKey
             });
+
+            SpotifyClientConfig spotifyClientConfig = SpotifyClientConfig
+                .CreateDefault()
+                .WithAuthenticator(new ClientCredentialsAuthenticator(SpotifyClientId, SpotifyClientSecret));
+            spotifyClient = new SpotifyClient(spotifyClientConfig);
 
             Console.WriteLine("Starting to process batch files...");
             await ProcessBatchFiles();
@@ -47,7 +58,12 @@ namespace Add_Link_Info
                 for (int i = 0; i < lines.Length; i++)
                 {
                     string line = lines[i];
-                    if (line.Contains("youtube.com") || line.Contains("youtu.be") && !line.StartsWith('`'))
+                    if (line.StartsWith('`'))
+                    {
+                        continue;
+                    }
+
+                    if (line.Contains("youtube.com") || line.Contains("youtu.be"))
                     {
                         string? videoId = GetVideoId(line);
                         if (videoId == null)
@@ -62,6 +78,14 @@ namespace Add_Link_Info
                         }
 
                         lines[i] = $"`[{video.Snippet.ChannelTitle}] {video.Snippet.Title}` {line}";
+                        isFileModified = true;
+                    }
+                    else if (line.Contains("spotify.com"))
+                    {
+                        string playlistId = line.Split('/').Last().Split('?')[0];
+                        FullPlaylist playlist = await spotifyClient.Playlists.Get(playlistId);
+
+                        lines[i] = $"`{playlist.Name}` {line}";
                         isFileModified = true;
                     }
                 }
@@ -91,7 +115,7 @@ namespace Add_Link_Info
 
         private async Task<Video?> GetYoutubeVideo(string videoId)
         {
-            VideosResource.ListRequest request = ytService.Videos.List("snippet");
+            VideosResource.ListRequest request = youtubeService.Videos.List("snippet");
             request.Id = videoId;
 
             VideoListResponse response = await request.ExecuteAsync();
