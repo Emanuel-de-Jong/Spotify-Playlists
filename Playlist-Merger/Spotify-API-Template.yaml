@@ -1,2 +1,3 @@
 ClientId: YOUR_CLIENT_ID
 ClientSecret: YOUR_CLIENT_SECRET
+RedirectUri: "YOUR_REDIRECT_URI"

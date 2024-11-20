@@ -28,7 +28,9 @@ namespace Playlist_Merger
 
             LoadMergePlaylistsDeps();
             LoadOldPlaylists();
-            CreateSpotifyClient();
+            await CreateSpotifyClient();
+
+            await FetchPlaylistMetas();
 
             Console.WriteLine("Done!");
         }
@@ -60,6 +62,7 @@ namespace Playlist_Merger
             Dictionary<string, string> apiCredentials = deserializer.Deserialize<Dictionary<string, string>>(yamlContent);
             string clientId = apiCredentials["ClientId"];
             string clientSecret = apiCredentials["ClientSecret"];
+            Uri redirectUri = new(apiCredentials["RedirectUri"]);
             string? refreshToken = apiCredentials.ContainsKey("RefreshToken") ? apiCredentials["RefreshToken"] : null;
             string? accessToken = null;
 
@@ -83,24 +86,24 @@ namespace Playlist_Merger
             if (accessToken == null)
             {
                 LoginRequest loginRequest = new(
-                    new Uri("http://localhost:5000/callback"),
+                    redirectUri,
                     clientId,
                     LoginRequest.ResponseType.Code)
                 {
-                    Scope = { Scopes.PlaylistReadPrivate }
+                    Scope = new[] { Scopes.PlaylistReadPrivate }
                 };
 
                 Uri uri = loginRequest.ToUri();
-                Console.WriteLine("Please log in via: " + uri);
-
-                string code = "TODO";
+                Console.WriteLine($"Login in and paste the uri here {uri}");
+                string responseUri = Console.ReadLine();
+                string code = responseUri.Split("code=")[1].Trim();
 
                 AuthorizationCodeTokenResponse tokenResponse = await new OAuthClient().RequestToken(
                     new AuthorizationCodeTokenRequest(
                         clientId,
                         clientSecret,
                         code,
-                        new Uri("http://localhost:5000/callback")
+                        redirectUri
                     )
                 );
 
