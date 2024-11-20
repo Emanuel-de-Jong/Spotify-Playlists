@@ -12,9 +12,9 @@ namespace Playlist_Merger
         private Playlists oldMixPlaylists = [];
         private Playlists oldMergePlaylists = [];
         private SpotifyClient spotifyClient;
-        private Playlists playlistMetas;
-        private Playlists mixPlaylists;
-        private Playlists mergePlaylists;
+        private string userId;
+        private Playlists mixPlaylists = [];
+        private Playlists mergePlaylists = [];
 
         private static void Main(string[] args)
         {
@@ -29,6 +29,8 @@ namespace Playlist_Merger
             LoadMergePlaylistsDeps();
             LoadOldPlaylists();
             await CreateSpotifyClient();
+
+            userId = (await spotifyClient.UserProfile.Current()).Id;
 
             await FetchPlaylistMetas();
 
@@ -63,12 +65,12 @@ namespace Playlist_Merger
             string clientId = apiCredentials["ClientId"];
             string clientSecret = apiCredentials["ClientSecret"];
             Uri redirectUri = new(apiCredentials["RedirectUri"]);
-            string? refreshToken = apiCredentials.ContainsKey("RefreshToken") ? apiCredentials["RefreshToken"] : null;
+            string? refreshToken = apiCredentials.TryGetValue("RefreshToken", out string? value) ? value : null;
             string? accessToken = null;
 
             if (refreshToken != null)
             {
-                AuthorizationCodeRefreshResponse tokenResponse = await new OAuthClient().RequestToken(
+                AuthorizationCodeRefreshResponse response = await new OAuthClient().RequestToken(
                     new AuthorizationCodeRefreshRequest(
                         clientId,
                         clientSecret,
@@ -76,10 +78,10 @@ namespace Playlist_Merger
                     )
                 );
 
-                if (!tokenResponse.IsExpired)
+                if (!response.IsExpired)
                 {
-                    accessToken = tokenResponse.AccessToken;
-                    apiCredentials["RefreshToken"] = tokenResponse.RefreshToken;
+                    accessToken = response.AccessToken;
+                    apiCredentials["RefreshToken"] = response.RefreshToken;
                 }
             }
 
@@ -90,7 +92,7 @@ namespace Playlist_Merger
                     clientId,
                     LoginRequest.ResponseType.Code)
                 {
-                    Scope = new[] { Scopes.PlaylistReadPrivate }
+                    Scope = [Scopes.PlaylistReadPrivate]
                 };
 
                 Uri uri = loginRequest.ToUri();
@@ -98,7 +100,7 @@ namespace Playlist_Merger
                 string responseUri = Console.ReadLine();
                 string code = responseUri.Split("code=")[1].Trim();
 
-                AuthorizationCodeTokenResponse tokenResponse = await new OAuthClient().RequestToken(
+                AuthorizationCodeTokenResponse response = await new OAuthClient().RequestToken(
                     new AuthorizationCodeTokenRequest(
                         clientId,
                         clientSecret,
@@ -107,8 +109,8 @@ namespace Playlist_Merger
                     )
                 );
 
-                accessToken = tokenResponse.AccessToken;
-                apiCredentials["RefreshToken"] = tokenResponse.RefreshToken;
+                accessToken = response.AccessToken;
+                apiCredentials["RefreshToken"] = response.RefreshToken;
             }
 
             spotifyClient = new SpotifyClient(accessToken);
@@ -119,10 +121,50 @@ namespace Playlist_Merger
 
         private async Task FetchPlaylistMetas()
         {
-            Paging<FullPlaylist> playlists = await spotifyClient.Playlists.CurrentUsers();
-            foreach (FullPlaylist playlist in playlists.Items)
+            PlaylistCurrentUsersRequest request = new()
             {
-                Console.WriteLine($"Playlist Name: {playlist.Name}, Is Public: {playlist.Public}");
+                Limit = 50
+            };
+            Paging<FullPlaylist> response = await spotifyClient.Playlists.CurrentUsers(request);
+
+            while (response != null)
+            {
+                foreach (FullPlaylist responsePlaylist in response.Items)
+                {
+                    if (responsePlaylist.Owner.Id != userId)
+                    {
+                        continue;
+                    }
+
+                    Playlist playlist = new()
+                    {
+                        Id = responsePlaylist.Id,
+                        Name = responsePlaylist.Name,
+                        SnapshotId = responsePlaylist.SnapshotId,
+                    };
+
+                    if (responsePlaylist.Name.StartsWith("KBOT"))
+                    {
+                        mixPlaylists.Add(playlist);
+                    }
+
+                    if (mergePlaylistDeps.Any(p => p.Name == responsePlaylist.Name))
+                    {
+                        mergePlaylists.Add(playlist);
+                    }
+                }
+
+                if (response.Next == null)
+                {
+                    break;
+                }
+
+                response = await spotifyClient.NextPage(response);
+            }
+
+            foreach (Playlist playlist in mixPlaylists)
+            {
+                Console.WriteLine(playlist.Name);
             }
         }
     }
