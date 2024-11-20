@@ -33,6 +33,10 @@ namespace Playlist_Merger
             userId = (await spotifyClient.UserProfile.Current()).Id;
 
             await FetchPlaylistMetas();
+            await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
+            SavePlaylists(mixPlaylists, "Mix-Playlists");
+            await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
+            SavePlaylists(mergePlaylists, "Merge-Playlists");
 
             Console.WriteLine("Done!");
         }
@@ -147,8 +151,7 @@ namespace Playlist_Merger
                     {
                         mixPlaylists.Add(playlist);
                     }
-
-                    if (mergePlaylistDeps.Any(p => p.Name == responsePlaylist.Name))
+                    else if (mergePlaylistDeps.Any(p => p.Name == responsePlaylist.Name))
                     {
                         mergePlaylists.Add(playlist);
                     }
@@ -166,6 +169,45 @@ namespace Playlist_Merger
             {
                 Console.WriteLine(playlist.Name);
             }
+        }
+
+        private async Task GetPlaylistTracks(Playlists playlists, Playlists oldPlaylists)
+        {
+            for (int i = 0; i < playlists.Count; i++)
+            {
+                Playlist playlist = playlists[i];
+                Playlist? oldPlaylist = oldPlaylists.FirstOrDefault(p => p.Id == playlist.Id && p.SnapshotId == playlist.SnapshotId);
+                if (oldPlaylist != null)
+                {
+                    playlists[i] = oldPlaylist;
+                    continue;
+                }
+
+                Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id);
+                while (response != null)
+                {
+                    foreach (PlaylistTrack<IPlayableItem> responseTrack in response.Items)
+                    {
+                        if (responseTrack.Track is FullTrack track)
+                        {
+                            playlist.Tracks.Add(track.Id);
+                        }
+                    }
+
+                    if (response.Next == null)
+                    {
+                        break;
+                    }
+
+                    response = await spotifyClient.NextPage(response);
+                }
+            }
+        }
+
+        private void SavePlaylists(Playlists playlists, string filename)
+        {
+            string yamlContent = serializer.Serialize(playlists);
+            File.WriteAllText($"{filename}.yaml", yamlContent);
         }
     }
 }
