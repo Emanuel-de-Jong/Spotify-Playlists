@@ -1,5 +1,6 @@
-- Name: Techno
-  IsInclusive: true
-  Deps:
-    - Techno
-    - Ambient Techno
+Playlists:
+  Techno:
+    IsInclusive: true
+    Deps:
+      - Techno
+      - Ambient Techno

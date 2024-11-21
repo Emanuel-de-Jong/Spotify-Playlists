@@ -1,4 +1,4 @@
-﻿using Playlist_Merger.Classes;
+﻿using Playlist_Merger.Models;
 using SpotifyAPI.Web;
 using YamlDotNet.Serialization;
 
@@ -8,7 +8,6 @@ namespace Playlist_Merger
     {
         private ISerializer serializer;
         private IDeserializer deserializer;
-        private MergePlaylistsDeps mergePlaylistsDeps;
         private Playlists oldMixPlaylists = [];
         private Playlists oldMergePlaylists = [];
         private SpotifyClient spotifyClient;
@@ -48,7 +47,7 @@ namespace Playlist_Merger
         private void LoadMergePlaylistsDeps()
         {
             string yamlContent = File.ReadAllText("Merge-Playlists-Deps.yaml");
-            mergePlaylistsDeps = deserializer.Deserialize<MergePlaylistsDeps>(yamlContent);
+            mergePlaylists = deserializer.Deserialize<Playlists>(yamlContent);
         }
 
         private void LoadOldPlaylists()
@@ -144,14 +143,13 @@ namespace Playlist_Merger
                         continue;
                     }
 
-                    Playlist playlist = new(responsePlaylist);
                     if (responsePlaylist.Name.StartsWith("KBOT"))
                     {
-                        mixPlaylists.Add(playlist);
+                        mixPlaylists.Add(responsePlaylist);
                     }
-                    else if (mergePlaylistsDeps.Any(p => p.Name == responsePlaylist.Name))
+                    else if (mergePlaylists.ContainsKey(responsePlaylist.Name))
                     {
-                        mergePlaylists.Add(playlist);
+                        mergePlaylists.Add(responsePlaylist);
                     }
                 }
 
@@ -166,30 +164,30 @@ namespace Playlist_Merger
 
         private async Task CreateMergePlaylists()
         {
-            foreach (MergePlaylistDeps mergePlaylistDeps in mergePlaylistsDeps)
+            foreach (KeyValuePair<string, Playlist> pair in mergePlaylists)
             {
-                if (!mergePlaylists.Any(mp => mp.Name == mergePlaylistDeps.Name))
+                if (pair.Value.Id == null)
                 {
-                    PlaylistCreateRequest request = new (mergePlaylistDeps.Name)
+                    PlaylistCreateRequest request = new(pair.Key)
                     {
                         Public = false
                     };
                     FullPlaylist responsePlaylist = await spotifyClient.Playlists.Create(userId, request);
 
-                    mergePlaylists.Add(new Playlist(responsePlaylist));
+                    mergePlaylists.Add(responsePlaylist);
                 }
             }
         }
 
         private async Task GetPlaylistTracks(Playlists playlists, Playlists oldPlaylists)
         {
-            for (int i = 0; i < playlists.Count; i++)
+            foreach (string playlistName in playlists.Keys)
             {
-                Playlist playlist = playlists[i];
-                Playlist? oldPlaylist = oldPlaylists.FirstOrDefault(p => p.Id == playlist.Id && p.SnapshotId == playlist.SnapshotId);
-                if (oldPlaylist != null)
+                Playlist playlist = playlists[playlistName];
+                oldPlaylists.TryGetValue(playlistName, out Playlist? oldPlaylist);
+                if (oldPlaylist != null && oldPlaylist.Id == playlist.Id && oldPlaylist.SnapshotId == playlist.SnapshotId)
                 {
-                    playlists[i] = oldPlaylist;
+                    playlist.Tracks = oldPlaylist.Tracks;
                     continue;
                 }
 
@@ -222,16 +220,53 @@ namespace Playlist_Merger
 
         private async Task UpdateMergePlaylists()
         {
-            foreach (Playlist mergePlaylist in mergePlaylists)
+            foreach (Playlist mergePlaylist in mergePlaylists.Values)
             {
                 List<string> newTracks = [];
-                List<string> addedTracks = [];
-                List<string> removedTracks = [];
-                foreach (Playlist mixPlaylist in mixPlaylists)
+                foreach (string dep in mergePlaylist.Deps)
                 {
+                    newTracks.AddRange(mixPlaylists[dep].Tracks);
+                }
 
+                List<string> addedTracks = newTracks.Except(mergePlaylist.Tracks).ToList();
+                for (int i = 0; i < addedTracks.Count; i += 100)
+                {
+                    List<string> batch = addedTracks
+                        .Skip(i)
+                        .Take(100)
+                        .ToList();
+                    await AddTracksToPlaylist(batch, mergePlaylist);
+                }
+
+                List<string> removedTracks = mergePlaylist.Tracks.Except(newTracks).ToList();
+                for (int i = 0; i < removedTracks.Count; i += 100)
+                {
+                    List<string> batch = removedTracks
+                        .Skip(i)
+                        .Take(100)
+                        .ToList();
+                    await RemoveTracksFromPlaylist(batch, mergePlaylist);
                 }
             }
+        }
+
+        private async Task AddTracksToPlaylist(List<string> tracks, Playlist playlist)
+        {
+            PlaylistAddItemsRequest addRequest = new(
+                    tracks.Select(t => "spotify:track:" + t).ToList());
+            await spotifyClient.Playlists.AddItems(playlist.Id, addRequest);
+        }
+
+        private async Task RemoveTracksFromPlaylist(List<string> tracks, Playlist playlist)
+        {
+            PlaylistRemoveItemsRequest removeRequest = new()
+            {
+                Tracks = tracks.Select(t => new PlaylistRemoveItemsRequest.Item()
+                {
+                    Uri = "spotify:track:" + t
+                }).ToList()
+            };
+            await spotifyClient.Playlists.RemoveItems(playlist.Id, removeRequest);
         }
     }
 }
