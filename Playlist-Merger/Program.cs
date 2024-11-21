@@ -8,7 +8,7 @@ namespace Playlist_Merger
     {
         private ISerializer serializer;
         private IDeserializer deserializer;
-        private MergePlaylistsDeps mergePlaylistDeps;
+        private MergePlaylistsDeps mergePlaylistsDeps;
         private Playlists oldMixPlaylists = [];
         private Playlists oldMergePlaylists = [];
         private SpotifyClient spotifyClient;
@@ -33,6 +33,7 @@ namespace Playlist_Merger
             userId = (await spotifyClient.UserProfile.Current()).Id;
 
             await FetchPlaylistMetas();
+            await CreateMergePlaylists();
             await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
             SavePlaylists(mixPlaylists, "Mix-Playlists");
             await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
@@ -44,7 +45,7 @@ namespace Playlist_Merger
         private void LoadMergePlaylistsDeps()
         {
             string yamlContent = File.ReadAllText("Merge-Playlists-Deps.yaml");
-            mergePlaylistDeps = deserializer.Deserialize<MergePlaylistsDeps>(yamlContent);
+            mergePlaylistsDeps = deserializer.Deserialize<MergePlaylistsDeps>(yamlContent);
         }
 
         private void LoadOldPlaylists()
@@ -151,7 +152,7 @@ namespace Playlist_Merger
                     {
                         mixPlaylists.Add(playlist);
                     }
-                    else if (mergePlaylistDeps.Any(p => p.Name == responsePlaylist.Name))
+                    else if (mergePlaylistsDeps.Any(p => p.Name == responsePlaylist.Name))
                     {
                         mergePlaylists.Add(playlist);
                     }
@@ -164,10 +165,20 @@ namespace Playlist_Merger
 
                 response = await spotifyClient.NextPage(response);
             }
+        }
 
-            foreach (Playlist playlist in mixPlaylists)
+        private async Task CreateMergePlaylists()
+        {
+            foreach (MergePlaylistDeps mergePlaylistDeps in mergePlaylistsDeps)
             {
-                Console.WriteLine(playlist.Name);
+                if (!mergePlaylists.Any(mp => mp.Name == mergePlaylistDeps.Name))
+                {
+                    PlaylistCreateRequest request = new (mergePlaylistDeps.Name)
+                    {
+                        Public = false
+                    };
+                    await spotifyClient.Playlists.Create(userId, request);
+                }
             }
         }
 
