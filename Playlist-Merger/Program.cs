@@ -39,6 +39,9 @@ namespace Playlist_Merger
             await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
+            await UpdateMergePlaylists();
+            SavePlaylists(mergePlaylists, "Merge-Playlists");
+
             Console.WriteLine("Done!");
         }
 
@@ -141,13 +144,7 @@ namespace Playlist_Merger
                         continue;
                     }
 
-                    Playlist playlist = new()
-                    {
-                        Id = responsePlaylist.Id,
-                        Name = responsePlaylist.Name,
-                        SnapshotId = responsePlaylist.SnapshotId,
-                    };
-
+                    Playlist playlist = new(responsePlaylist);
                     if (responsePlaylist.Name.StartsWith("KBOT"))
                     {
                         mixPlaylists.Add(playlist);
@@ -177,7 +174,9 @@ namespace Playlist_Merger
                     {
                         Public = false
                     };
-                    await spotifyClient.Playlists.Create(userId, request);
+                    FullPlaylist responsePlaylist = await spotifyClient.Playlists.Create(userId, request);
+
+                    mergePlaylists.Add(new Playlist(responsePlaylist));
                 }
             }
         }
@@ -219,6 +218,20 @@ namespace Playlist_Merger
         {
             string yamlContent = serializer.Serialize(playlists);
             File.WriteAllText($"{filename}.yaml", yamlContent);
+        }
+
+        private async Task UpdateMergePlaylists()
+        {
+            foreach (Playlist mergePlaylist in mergePlaylists)
+            {
+                List<string> newTracks = [];
+                List<string> addedTracks = [];
+                List<string> removedTracks = [];
+                foreach (Playlist mixPlaylist in mixPlaylists)
+                {
+
+                }
+            }
         }
     }
 }
