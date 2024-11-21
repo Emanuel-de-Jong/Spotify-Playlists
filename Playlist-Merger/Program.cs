@@ -13,7 +13,7 @@ namespace Playlist_Merger
         private SpotifyClient spotifyClient;
         private string userId;
         private Playlists mixPlaylists = [];
-        private Playlists mergePlaylists = [];
+        private Playlists mergePlaylists;
 
         private static void Main(string[] args)
         {
@@ -185,7 +185,9 @@ namespace Playlist_Merger
             {
                 Playlist playlist = playlists[playlistName];
                 oldPlaylists.TryGetValue(playlistName, out Playlist? oldPlaylist);
-                if (oldPlaylist != null && oldPlaylist.Id == playlist.Id && oldPlaylist.SnapshotId == playlist.SnapshotId)
+                if (oldPlaylist != null &&
+                    oldPlaylist.Id == playlist.Id &&
+                    oldPlaylist.SnapshotId == playlist.SnapshotId)
                 {
                     playlist.Tracks = oldPlaylist.Tracks;
                     continue;
@@ -194,13 +196,11 @@ namespace Playlist_Merger
                 Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id);
                 while (response != null)
                 {
-                    foreach (PlaylistTrack<IPlayableItem> responseTrack in response.Items)
-                    {
-                        if (responseTrack.Track is FullTrack track)
-                        {
-                            playlist.Tracks.Add(track.Id);
-                        }
-                    }
+                    playlist.Tracks.AddRange(response.Items
+                        .Select(i => i.Track)
+                        .OfType<FullTrack>()
+                        .Select(track => track.Id)
+                        .ToList());
 
                     if (response.Next == null)
                     {
@@ -252,13 +252,22 @@ namespace Playlist_Merger
 
         private async Task AddTracksToPlaylist(List<string> tracks, Playlist playlist)
         {
+            playlist.Tracks.AddRange(tracks);
+
             PlaylistAddItemsRequest addRequest = new(
                     tracks.Select(t => "spotify:track:" + t).ToList());
-            await spotifyClient.Playlists.AddItems(playlist.Id, addRequest);
+            SnapshotResponse response = await spotifyClient.Playlists.AddItems(playlist.Id, addRequest);
+
+            playlist.SnapshotId = response.SnapshotId;
         }
 
         private async Task RemoveTracksFromPlaylist(List<string> tracks, Playlist playlist)
         {
+            foreach (string track in tracks)
+            {
+                playlist.Tracks.Remove(track);
+            }
+
             PlaylistRemoveItemsRequest removeRequest = new()
             {
                 Tracks = tracks.Select(t => new PlaylistRemoveItemsRequest.Item()
@@ -266,7 +275,9 @@ namespace Playlist_Merger
                     Uri = "spotify:track:" + t
                 }).ToList()
             };
-            await spotifyClient.Playlists.RemoveItems(playlist.Id, removeRequest);
+            SnapshotResponse response = await spotifyClient.Playlists.RemoveItems(playlist.Id, removeRequest);
+
+            playlist.SnapshotId = response.SnapshotId;
         }
     }
 }
