@@ -1,6 +1,5 @@
-Playlists:
-  Techno:
-    IsInclusive: true
-    Deps:
-      - Techno
-      - Ambient Techno
+Techno:
+  IsInclusive: true
+  Deps:
+  - Techno
+  - Ambient Techno

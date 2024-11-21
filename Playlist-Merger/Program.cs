@@ -48,6 +48,10 @@ namespace Playlist_Merger
         {
             string yamlContent = File.ReadAllText("Merge-Playlists-Deps.yaml");
             mergePlaylists = deserializer.Deserialize<Playlists>(yamlContent);
+            foreach (Playlist mergePlaylist in mergePlaylists.Values)
+            {
+                mergePlaylist.Deps = mergePlaylist.Deps.Select(d => $"KBOT's {d} Mix").ToList();
+            }
         }
 
         private void LoadOldPlaylists()
@@ -99,7 +103,7 @@ namespace Playlist_Merger
                     clientId,
                     LoginRequest.ResponseType.Code)
                 {
-                    Scope = [Scopes.PlaylistReadPrivate]
+                    Scope = [Scopes.PlaylistModifyPrivate]
                 };
 
                 Uri uri = loginRequest.ToUri();
@@ -193,7 +197,11 @@ namespace Playlist_Merger
                     continue;
                 }
 
-                Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id);
+                PlaylistGetItemsRequest request = new()
+                {
+                    Limit = 50
+                };
+                Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id, request);
                 while (response != null)
                 {
                     playlist.Tracks.AddRange(response.Items
