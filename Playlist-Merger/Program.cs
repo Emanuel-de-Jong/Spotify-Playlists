@@ -25,19 +25,29 @@ namespace Playlist_Merger
             serializer = new SerializerBuilder().Build();
             deserializer = new DeserializerBuilder().Build();
 
+            Console.WriteLine("Loading YAMLs");
             LoadMergePlaylistsDeps();
             LoadOldPlaylists();
+
+            Console.WriteLine("Creating spotify client");
             await CreateSpotifyClient();
 
             userId = (await spotifyClient.UserProfile.Current()).Id;
 
+            Console.WriteLine("fetching playlist metas");
             await FetchPlaylistMetas();
+            Console.WriteLine("Creating missing merge playlists");
             await CreateMergePlaylists();
+
+            Console.WriteLine("Getting mix playlist tracks");
             await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
             SavePlaylists(mixPlaylists, "Mix-Playlists");
+
+            Console.WriteLine("Getting merge playlist tracks");
             await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
+            Console.WriteLine("Updating merge playlists");
             await UpdateMergePlaylists();
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
@@ -82,12 +92,7 @@ namespace Playlist_Merger
             if (refreshToken != null)
             {
                 AuthorizationCodeRefreshResponse response = await new OAuthClient().RequestToken(
-                    new AuthorizationCodeRefreshRequest(
-                        clientId,
-                        clientSecret,
-                        refreshToken
-                    )
-                );
+                    new AuthorizationCodeRefreshRequest(clientId, clientSecret, refreshToken));
 
                 if (!response.IsExpired)
                 {
@@ -112,13 +117,7 @@ namespace Playlist_Merger
                 string code = responseUri.Split("code=")[1].Trim();
 
                 AuthorizationCodeTokenResponse response = await new OAuthClient().RequestToken(
-                    new AuthorizationCodeTokenRequest(
-                        clientId,
-                        clientSecret,
-                        code,
-                        redirectUri
-                    )
-                );
+                    new AuthorizationCodeTokenRequest(clientId, clientSecret, code, redirectUri));
 
                 accessToken = response.AccessToken;
                 apiCredentials["RefreshToken"] = response.RefreshToken;
@@ -132,10 +131,7 @@ namespace Playlist_Merger
 
         private async Task FetchPlaylistMetas()
         {
-            PlaylistCurrentUsersRequest request = new()
-            {
-                Limit = 50
-            };
+            PlaylistCurrentUsersRequest request = new() { Limit = 50 };
             Paging<FullPlaylist> response = await spotifyClient.Playlists.CurrentUsers(request);
 
             while (response != null)
@@ -172,10 +168,7 @@ namespace Playlist_Merger
             {
                 if (pair.Value.Id == null)
                 {
-                    PlaylistCreateRequest request = new(pair.Key)
-                    {
-                        Public = false
-                    };
+                    PlaylistCreateRequest request = new(pair.Key) { Public = false };
                     FullPlaylist responsePlaylist = await spotifyClient.Playlists.Create(userId, request);
 
                     mergePlaylists.Add(responsePlaylist);
@@ -197,18 +190,14 @@ namespace Playlist_Merger
                     continue;
                 }
 
-                PlaylistGetItemsRequest request = new()
-                {
-                    Limit = 50
-                };
+                PlaylistGetItemsRequest request = new() { Limit = 50 };
                 Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id, request);
                 while (response != null)
                 {
                     playlist.Tracks.AddRange(response.Items
                         .Select(i => i.Track)
                         .OfType<FullTrack>()
-                        .Select(track => track.Id)
-                        .ToList());
+                        .Select(track => track.Id));
 
                     if (response.Next == null)
                     {
@@ -230,29 +219,21 @@ namespace Playlist_Merger
         {
             foreach (Playlist mergePlaylist in mergePlaylists.Values)
             {
-                List<string> newTracks = [];
-                foreach (string dep in mergePlaylist.Deps)
-                {
-                    newTracks.AddRange(mixPlaylists[dep].Tracks);
-                }
+                List<string> newTracks = mergePlaylist.Deps
+                    .SelectMany(dep => mixPlaylists[dep].Tracks)
+                    .ToList();
 
                 List<string> addedTracks = newTracks.Except(mergePlaylist.Tracks).ToList();
                 for (int i = 0; i < addedTracks.Count; i += 100)
                 {
-                    List<string> batch = addedTracks
-                        .Skip(i)
-                        .Take(100)
-                        .ToList();
+                    List<string> batch = addedTracks.Skip(i).Take(100).ToList();
                     await AddTracksToPlaylist(batch, mergePlaylist);
                 }
 
                 List<string> removedTracks = mergePlaylist.Tracks.Except(newTracks).ToList();
                 for (int i = 0; i < removedTracks.Count; i += 100)
                 {
-                    List<string> batch = removedTracks
-                        .Skip(i)
-                        .Take(100)
-                        .ToList();
+                    List<string> batch = removedTracks.Skip(i).Take(100).ToList();
                     await RemoveTracksFromPlaylist(batch, mergePlaylist);
                 }
             }
@@ -262,8 +243,7 @@ namespace Playlist_Merger
         {
             playlist.Tracks.AddRange(tracks);
 
-            PlaylistAddItemsRequest addRequest = new(
-                    tracks.Select(t => "spotify:track:" + t).ToList());
+            PlaylistAddItemsRequest addRequest = new(tracks.Select(t => "spotify:track:" + t).ToList());
             SnapshotResponse response = await spotifyClient.Playlists.AddItems(playlist.Id, addRequest);
 
             playlist.SnapshotId = response.SnapshotId;
@@ -271,10 +251,7 @@ namespace Playlist_Merger
 
         private async Task RemoveTracksFromPlaylist(List<string> tracks, Playlist playlist)
         {
-            foreach (string track in tracks)
-            {
-                playlist.Tracks.Remove(track);
-            }
+            playlist.Tracks = playlist.Tracks.Except(tracks).ToList();
 
             PlaylistRemoveItemsRequest removeRequest = new()
             {
