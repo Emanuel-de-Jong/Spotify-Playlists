@@ -134,31 +134,32 @@ namespace Playlist_Merger
             PlaylistCurrentUsersRequest request = new() { Limit = 50 };
             Paging<FullPlaylist> response = await spotifyClient.Playlists.CurrentUsers(request);
 
+            List<FullPlaylist> responsePlaylists = [];
             while (response != null)
             {
-                foreach (FullPlaylist responsePlaylist in response.Items)
-                {
-                    if (responsePlaylist.Owner.Id != userId)
-                    {
-                        continue;
-                    }
-
-                    if (responsePlaylist.Name.StartsWith("KBOT"))
-                    {
-                        mixPlaylists.Add(responsePlaylist);
-                    }
-                    else if (mergePlaylists.ContainsKey(responsePlaylist.Name))
-                    {
-                        mergePlaylists.Add(responsePlaylist);
-                    }
-                }
-
+                responsePlaylists.AddRange(response.Items);
                 if (response.Next == null)
                 {
                     break;
                 }
-
                 response = await spotifyClient.NextPage(response);
+            }
+
+            foreach (FullPlaylist responsePlaylist in responsePlaylists)
+            {
+                if (responsePlaylist.Owner.Id != userId)
+                {
+                    continue;
+                }
+
+                if (responsePlaylist.Name.StartsWith("KBOT"))
+                {
+                    mixPlaylists.Add(responsePlaylist);
+                }
+                else if (mergePlaylists.ContainsKey(responsePlaylist.Name))
+                {
+                    mergePlaylists.Add(responsePlaylist);
+                }
             }
         }
 
@@ -192,20 +193,22 @@ namespace Playlist_Merger
 
                 PlaylistGetItemsRequest request = new() { Limit = 50 };
                 Paging<PlaylistTrack<IPlayableItem>> response = await spotifyClient.Playlists.GetItems(playlist.Id, request);
+                List<PlaylistTrack<IPlayableItem>> items = [];
                 while (response != null)
                 {
-                    playlist.Tracks.AddRange(response.Items
-                        .Select(i => i.Track)
-                        .OfType<FullTrack>()
-                        .Select(track => track.Id));
-
+                    items.AddRange(response.Items);
                     if (response.Next == null)
                     {
                         break;
                     }
-
                     response = await spotifyClient.NextPage(response);
                 }
+
+                playlist.Tracks = items
+                    .Select(i => i.Track)
+                    .OfType<FullTrack>()
+                    .Select(track => track.Id)
+                    .ToList();
             }
         }
 
