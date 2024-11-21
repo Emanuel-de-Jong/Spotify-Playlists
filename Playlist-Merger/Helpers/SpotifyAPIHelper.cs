@@ -6,7 +6,7 @@ namespace Playlist_Merger.Helpers
     {
         private const int MaxRetries = 3;
 
-        public async Task<List<T>> FetchSpotifyData<T>(Func<Task<Paging<T>>> requestFunction, SpotifyClient spotifyClient)
+        public async Task<List<T>> CallPaginated<T>(Func<Task<Paging<T>>> requestFunction, SpotifyClient spotifyClient)
         {
             List<T> allItems = [];
             int retryCount = 0;
@@ -28,6 +28,8 @@ namespace Playlist_Merger.Helpers
 
                         response = await spotifyClient.NextPage(response);
                     }
+
+                    return allItems;
                 }
                 catch (APIException apiEx)
                 {
@@ -51,6 +53,37 @@ namespace Playlist_Merger.Helpers
             }
 
             return allItems;
+        }
+
+        public async Task<T> Call<T>(Func<Task<T>> requestFunction)
+        {
+            int retryCount = 0;
+
+            while (retryCount <= MaxRetries)
+            {
+                try
+                {
+                    return await requestFunction();
+                }
+                catch (APIException apiEx)
+                {
+                    if (apiEx.Response != null && apiEx.Response.Headers.TryGetValue("Retry-After", out string value))
+                    {
+                        int retryAfterSeconds = int.Parse(value);
+                        Console.WriteLine($"Rate limit hit. Retrying after {retryAfterSeconds} seconds...");
+                        await Task.Delay(retryAfterSeconds * 1000);
+                        retryCount++;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
+                retryCount++;
+            }
+
+            throw new Exception("Max retry attempts reached. Could not complete the request.");
         }
     }
 }
