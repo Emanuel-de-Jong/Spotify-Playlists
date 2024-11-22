@@ -1,6 +1,7 @@
 ﻿using Playlist_Merger.Helpers;
 using Playlist_Merger.Models;
 using SpotifyAPI.Web;
+using System.Text;
 
 namespace Playlist_Merger
 {
@@ -54,9 +55,7 @@ namespace Playlist_Merger
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
-                Console.WriteLine(ex.ToString());
-                Console.WriteLine(ex.StackTrace);
+                HandleException(ex);
             }
 
             Console.WriteLine("Saving changes locally");
@@ -191,6 +190,19 @@ namespace Playlist_Merger
                     await spotifyAPIHelper.RemoveTracksFromPlaylist(batch, mergePlaylist);
                 }
             }
+        }
+
+        public void HandleException(Exception ex)
+        {
+            StringBuilder stringBuilder = new();
+            string date = DateTime.Now.ToString("dd-MM-yy HH:mm");
+            stringBuilder.AppendLine($"[{date}] {ex.GetType()}: {ex.Message}");
+            stringBuilder.AppendLine(ex.ToString());
+            stringBuilder.AppendLine(ex.StackTrace);
+
+            string errorMessage = stringBuilder.ToString();
+            Console.WriteLine(errorMessage);
+            File.AppendAllText("log.txt", errorMessage);
         }
     }
 }

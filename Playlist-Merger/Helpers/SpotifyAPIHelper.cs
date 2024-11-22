@@ -5,7 +5,7 @@ namespace Playlist_Merger.Helpers
 {
     public class SpotifyAPIHelper
     {
-        private const int MAX_RETRIES = 3;
+        private const int MAX_RETRIES = 1;
 
         public int RequestCount { get; set; }
 
@@ -100,8 +100,10 @@ namespace Playlist_Merger.Helpers
                     if (rateLimitEx.Response.Headers.TryGetValue("Retry-After", out string retryAfterStr) &&
                         int.TryParse(retryAfterStr, out int retryAfter))
                     {
+                        retryAfter++;
                         Console.WriteLine($"Rate limit hit. Retrying after {retryAfter} seconds...");
                         await Task.Delay(retryAfter * 1000);
+
                         retryCount++;
                     }
                     else
