@@ -1,18 +1,21 @@
 ﻿using Playlist_Merger.Helpers;
 using Playlist_Merger.Models;
 using SpotifyAPI.Web;
+using System.Net;
 using YamlDotNet.Serialization;
 
 namespace Playlist_Merger
 {
     public class Program
     {
-        private ISerializer serializer;
-        private IDeserializer deserializer;
-
+        private YAMLHelper yamlHelper = new();
         private SpotifyAPIHelper spotifyAPIHelper = new();
+
+        Dictionary<string, string> cache;
+
+        Dictionary<string, string> apiCredentials;
         private SpotifyClient spotifyClient;
-        private string userId;
+        private string? userId;
 
         private Playlists oldMixPlaylists = [];
         private Playlists oldMergePlaylists = [];
@@ -26,91 +29,70 @@ namespace Playlist_Merger
 
         private async Task Run()
         {
-            serializer = new SerializerBuilder().Build();
-            deserializer = new DeserializerBuilder().Build();
+            try
+            {
+                Console.WriteLine("Loading YAMLs");
+                cache = yamlHelper.LoadCache();
+                mergePlaylists = yamlHelper.LoadMergePlaylistsDeps();
 
-            Console.WriteLine("Loading YAMLs");
-            LoadMergePlaylistsDeps();
-            LoadOldPlaylists();
+                oldMixPlaylists = yamlHelper.Deserialize<Playlists>(YAMLHelper.MIX_FILE_NAME);
+                oldMixPlaylists ??= [];
 
-            Console.WriteLine("Creating Spotify client");
-            await CreateSpotifyClient();
+                oldMergePlaylists = yamlHelper.Deserialize<Playlists>(YAMLHelper.MERGE_FILE_NAME);
+                oldMergePlaylists ??= [];
 
-            Console.WriteLine("Getting user id");
-            await GetUserId();
+                Console.WriteLine("Creating Spotify client");
+                await CreateSpotifyClient();
 
-            Console.WriteLine("Fetching playlist metas");
-            await spotifyAPIHelper.FetchPlaylistMetas(mixPlaylists, mergePlaylists);
+                Console.WriteLine("Getting user id");
+                await GetUserId();
 
-            Console.WriteLine("Creating missing merge playlists");
-            await spotifyAPIHelper.CreateMergePlaylists(mergePlaylists);
+                Console.WriteLine("Fetching playlist metas");
+                await spotifyAPIHelper.FetchPlaylistMetas(mixPlaylists, mergePlaylists);
 
-            Console.WriteLine("Getting mix playlist tracks");
-            await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
-            SavePlaylists(mixPlaylists, "Mix-Playlists");
+                Console.WriteLine("Creating missing merge playlists");
+                await spotifyAPIHelper.CreateMergePlaylists(mergePlaylists);
 
-            Console.WriteLine("Getting merge playlist tracks");
-            await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
-            SavePlaylists(mergePlaylists, "Merge-Playlists");
+                Console.WriteLine("Getting mix playlist tracks");
+                await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
+                yamlHelper.Serialize(mixPlaylists, YAMLHelper.MIX_FILE_NAME);
 
-            Console.WriteLine("Updating merge playlists");
-            await spotifyAPIHelper.UpdateMergePlaylists(mixPlaylists, mergePlaylists);
-            SavePlaylists(mergePlaylists, "Merge-Playlists");
+                Console.WriteLine("Getting merge playlist tracks");
+                await GetPlaylistTracks(mergePlaylists, oldMergePlaylists);
+                yamlHelper.Serialize(mergePlaylists, YAMLHelper.MERGE_FILE_NAME);
+
+                Console.WriteLine("Updating merge playlists");
+                await spotifyAPIHelper.UpdateMergePlaylists(mixPlaylists, mergePlaylists);
+                yamlHelper.Serialize(mergePlaylists, YAMLHelper.MERGE_FILE_NAME);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                Console.WriteLine(ex.ToString());
+                Console.WriteLine(ex.StackTrace);
+            }
+
+            yamlHelper.SaveAll(cache, apiCredentials, mixPlaylists, mergePlaylists);
 
             Console.WriteLine($"Request count: {spotifyAPIHelper.RequestCount}");
             Console.WriteLine("Done!");
         }
 
-        private void LoadMergePlaylistsDeps()
-        {
-            string yamlContent = File.ReadAllText("Merge-Playlists-Deps.yaml");
-            mergePlaylists = deserializer.Deserialize<Playlists>(yamlContent);
-            foreach (Playlist mergePlaylist in mergePlaylists.Values)
-            {
-                mergePlaylist.Deps = mergePlaylist.Deps.Select(d => $"KBOT's {d} Mix").ToList();
-            }
-        }
-
-        private void LoadOldPlaylists()
-        {
-            if (File.Exists("Mix-Playlists.yaml"))
-            {
-                string yamlContent = File.ReadAllText("Mix-Playlists.yaml");
-                oldMixPlaylists = deserializer.Deserialize<Playlists>(yamlContent);
-            }
-
-            if (File.Exists("Merge-Playlists.yaml"))
-            {
-                string yamlContent = File.ReadAllText("Merge-Playlists.yaml");
-                oldMergePlaylists = deserializer.Deserialize<Playlists>(yamlContent);
-            }
-        }
-
         private async Task CreateSpotifyClient()
         {
-            string yamlContent = File.ReadAllText("Spotify-API.yaml");
-            Dictionary<string, string> apiCredentials = deserializer.Deserialize<Dictionary<string, string>>(yamlContent);
-
+            apiCredentials = yamlHelper.Deserialize<Dictionary<string, string>>(YAMLHelper.SPOTIFY_API_FILE_NAME);
             spotifyClient = await spotifyAPIHelper.CreateSpotifyClient(apiCredentials);
-
-            yamlContent = serializer.Serialize(apiCredentials);
-            File.WriteAllText("Spotify-API.yaml", yamlContent);
+            yamlHelper.Serialize(apiCredentials, YAMLHelper.SPOTIFY_API_FILE_NAME);
         }
 
         private async Task GetUserId()
         {
-            if (File.Exists("Cache.yaml"))
-            {
-                string yamlContent = File.ReadAllText("Cache.yaml");
-                userId = deserializer.Deserialize<string>(yamlContent);
-            }
-            else
+            if (!cache.TryGetValue("UserId", out userId))
             {
                 userId = (await spotifyAPIHelper.Call(
                     () => spotifyClient.UserProfile.Current())).Id;
-
-                string yamlContent = serializer.Serialize(userId);
-                File.WriteAllText($"Cache.yaml", yamlContent);
+                cache["UserId"] = userId;
+                yamlHelper.Serialize(cache, YAMLHelper.CACHE_FILE_NAME);
             }
 
             spotifyAPIHelper.UserId = userId;
@@ -140,12 +122,6 @@ namespace Playlist_Merger
                     .Select(track => track.Id)
                     .ToList();
             }
-        }
-
-        private void SavePlaylists(Playlists playlists, string filename)
-        {
-            string yamlContent = serializer.Serialize(playlists);
-            File.WriteAllText($"{filename}.yaml", yamlContent);
         }
     }
 }
