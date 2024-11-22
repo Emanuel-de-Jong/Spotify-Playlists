@@ -10,6 +10,7 @@ namespace Playlist_Merger
         private ISerializer serializer;
         private IDeserializer deserializer;
 
+        private SpotifyAPIHelper spotifyAPIHelper = new();
         private SpotifyClient spotifyClient;
         private string userId;
 
@@ -39,10 +40,10 @@ namespace Playlist_Merger
             await GetUserId();
 
             Console.WriteLine("Fetching playlist metas");
-            await FetchPlaylistMetas();
+            await spotifyAPIHelper.FetchPlaylistMetas(mixPlaylists, mergePlaylists);
 
             Console.WriteLine("Creating missing merge playlists");
-            await CreateMergePlaylists();
+            await spotifyAPIHelper.CreateMergePlaylists(mergePlaylists);
 
             Console.WriteLine("Getting mix playlist tracks");
             await GetPlaylistTracks(mixPlaylists, oldMixPlaylists);
@@ -53,10 +54,10 @@ namespace Playlist_Merger
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
             Console.WriteLine("Updating merge playlists");
-            await UpdateMergePlaylists();
+            await spotifyAPIHelper.UpdateMergePlaylists(mixPlaylists, mergePlaylists);
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
-            Console.WriteLine($"Request count: {SpotifyAPIHelper.RequestCount}");
+            Console.WriteLine($"Request count: {spotifyAPIHelper.RequestCount}");
             Console.WriteLine("Done!");
         }
 
@@ -89,51 +90,8 @@ namespace Playlist_Merger
         {
             string yamlContent = File.ReadAllText("Spotify-API.yaml");
             Dictionary<string, string> apiCredentials = deserializer.Deserialize<Dictionary<string, string>>(yamlContent);
-            string clientId = apiCredentials["ClientId"];
-            string clientSecret = apiCredentials["ClientSecret"];
-            Uri redirectUri = new(apiCredentials["RedirectUri"]);
-            string? refreshToken = apiCredentials.TryGetValue("RefreshToken", out string? value) ? value : null;
-            string? accessToken = null;
 
-            if (refreshToken != null)
-            {
-                try
-                {
-                    AuthorizationCodeRefreshResponse response = await new OAuthClient().RequestToken(
-                        new AuthorizationCodeRefreshRequest(clientId, clientSecret, refreshToken));
-
-                    accessToken = response.AccessToken;
-                    apiCredentials["RefreshToken"] = response.RefreshToken;
-                }
-                catch (APIUnauthorizedException)
-                {
-                    Console.WriteLine("Refresh token is invalid. Re-authentication is required.");
-                }
-            }
-
-            if (accessToken == null)
-            {
-                LoginRequest loginRequest = new(
-                    redirectUri,
-                    clientId,
-                    LoginRequest.ResponseType.Code)
-                {
-                    Scope = [Scopes.PlaylistModifyPrivate, Scopes.PlaylistReadPrivate, Scopes.PlaylistReadCollaborative]
-                };
-
-                Uri uri = loginRequest.ToUri();
-                Console.WriteLine($"Login and paste the URI here: {uri}");
-                string responseUri = Console.ReadLine();
-                string code = responseUri.Split("code=")[1].Trim();
-
-                AuthorizationCodeTokenResponse response = await new OAuthClient().RequestToken(
-                    new AuthorizationCodeTokenRequest(clientId, clientSecret, code, redirectUri));
-
-                accessToken = response.AccessToken;
-                apiCredentials["RefreshToken"] = response.RefreshToken;
-            }
-
-            spotifyClient = new SpotifyClient(accessToken);
+            spotifyClient = await spotifyAPIHelper.CreateSpotifyClient(apiCredentials);
 
             yamlContent = serializer.Serialize(apiCredentials);
             File.WriteAllText("Spotify-API.yaml", yamlContent);
@@ -148,51 +106,14 @@ namespace Playlist_Merger
             }
             else
             {
-                userId = (await SpotifyAPIHelper.Call(
+                userId = (await spotifyAPIHelper.Call(
                     () => spotifyClient.UserProfile.Current())).Id;
 
                 string yamlContent = serializer.Serialize(userId);
                 File.WriteAllText($"Cache.yaml", yamlContent);
             }
-        }
 
-        private async Task FetchPlaylistMetas()
-        {
-            PlaylistCurrentUsersRequest request = new() { Limit = 50 };
-            List<FullPlaylist> responsePlaylists = await SpotifyAPIHelper.CallPaginated(
-                () => spotifyClient.Playlists.CurrentUsers(request),
-                spotifyClient);
-            foreach (FullPlaylist responsePlaylist in responsePlaylists)
-            {
-                if (responsePlaylist.Owner.Id != userId)
-                {
-                    continue;
-                }
-
-                if (responsePlaylist.Name.StartsWith("KBOT"))
-                {
-                    mixPlaylists.Add(responsePlaylist);
-                }
-                else if (mergePlaylists.ContainsKey(responsePlaylist.Name))
-                {
-                    mergePlaylists.Add(responsePlaylist);
-                }
-            }
-        }
-
-        private async Task CreateMergePlaylists()
-        {
-            foreach (KeyValuePair<string, Playlist> pair in mergePlaylists)
-            {
-                if (pair.Value.Id == null)
-                {
-                    PlaylistCreateRequest request = new(pair.Key) { Public = false };
-                    FullPlaylist responsePlaylist = await SpotifyAPIHelper.Call(
-                        () => spotifyClient.Playlists.Create(userId, request));
-
-                    mergePlaylists.Add(responsePlaylist);
-                }
-            }
+            spotifyAPIHelper.UserId = userId;
         }
 
         private async Task GetPlaylistTracks(Playlists playlists, Playlists oldPlaylists)
@@ -210,9 +131,8 @@ namespace Playlist_Merger
                 }
 
                 PlaylistGetItemsRequest request = new() { Limit = 100 };
-                List<PlaylistTrack<IPlayableItem>> items = await SpotifyAPIHelper.CallPaginated(
-                    () => spotifyClient.Playlists.GetItems(playlist.Id, request),
-                    spotifyClient);
+                List<PlaylistTrack<IPlayableItem>> items = await spotifyAPIHelper.CallPaginated(
+                    () => spotifyClient.Playlists.GetItems(playlist.Id, request));
 
                 playlist.Tracks = items
                     .Select(i => i.Track)
@@ -226,69 +146,6 @@ namespace Playlist_Merger
         {
             string yamlContent = serializer.Serialize(playlists);
             File.WriteAllText($"{filename}.yaml", yamlContent);
-        }
-
-        private async Task UpdateMergePlaylists()
-        {
-            foreach (Playlist mergePlaylist in mergePlaylists.Values)
-            {
-                List<string>? newTracks = null;
-                if (mergePlaylist.IsInclusive)
-                {
-                    newTracks = mergePlaylist.Deps
-                        .SelectMany(dep => mixPlaylists[dep].Tracks)
-                        .ToList();
-                }
-                else
-                {
-                    newTracks = mixPlaylists
-                        .Where(p => !mergePlaylist.Deps.Contains(p.Key))
-                        .SelectMany(p => p.Value.Tracks)
-                        .ToList();
-                }
-
-                List<string> addedTracks = newTracks.Except(mergePlaylist.Tracks).ToList();
-                for (int i = 0; i < addedTracks.Count; i += 100)
-                {
-                    List<string> batch = addedTracks.Skip(i).Take(100).ToList();
-                    await AddTracksToPlaylist(batch, mergePlaylist);
-                }
-
-                List<string> removedTracks = mergePlaylist.Tracks.Except(newTracks).ToList();
-                for (int i = 0; i < removedTracks.Count; i += 100)
-                {
-                    List<string> batch = removedTracks.Skip(i).Take(100).ToList();
-                    await RemoveTracksFromPlaylist(batch, mergePlaylist);
-                }
-            }
-        }
-
-        private async Task AddTracksToPlaylist(List<string> tracks, Playlist playlist)
-        {
-            playlist.Tracks.AddRange(tracks);
-
-            PlaylistAddItemsRequest request = new(tracks.Select(t => "spotify:track:" + t).ToList());
-            SnapshotResponse response = await SpotifyAPIHelper.Call(
-                () => spotifyClient.Playlists.AddItems(playlist.Id, request));
-
-            playlist.SnapshotId = response.SnapshotId;
-        }
-
-        private async Task RemoveTracksFromPlaylist(List<string> tracks, Playlist playlist)
-        {
-            playlist.Tracks = playlist.Tracks.Except(tracks).ToList();
-
-            PlaylistRemoveItemsRequest request = new()
-            {
-                Tracks = tracks.Select(t => new PlaylistRemoveItemsRequest.Item()
-                {
-                    Uri = "spotify:track:" + t
-                }).ToList()
-            };
-            SnapshotResponse response = await SpotifyAPIHelper.Call(
-                () => spotifyClient.Playlists.RemoveItems(playlist.Id, request));
-
-            playlist.SnapshotId = response.SnapshotId;
         }
     }
 }
