@@ -35,7 +35,8 @@ namespace Playlist_Merger
             Console.WriteLine("Creating Spotify client");
             await CreateSpotifyClient();
 
-            userId = (await spotifyClient.UserProfile.Current()).Id;
+            userId = (await SpotifyAPIHelper.Call(
+                () => spotifyClient.UserProfile.Current())).Id;
 
             Console.WriteLine("Fetching playlist metas");
             await FetchPlaylistMetas();
@@ -187,7 +188,7 @@ namespace Playlist_Merger
                     continue;
                 }
 
-                PlaylistGetItemsRequest request = new() { Limit = 50 };
+                PlaylistGetItemsRequest request = new() { Limit = 100 };
                 List<PlaylistTrack<IPlayableItem>> items = await SpotifyAPIHelper.CallPaginated(
                     () => spotifyClient.Playlists.GetItems(playlist.Id, request),
                     spotifyClient);
