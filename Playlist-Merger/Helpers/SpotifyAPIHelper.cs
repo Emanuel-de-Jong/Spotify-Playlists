@@ -6,6 +6,8 @@ namespace Playlist_Merger.Helpers
     {
         private const int MAX_RETRIES = 3;
 
+        public static int RequestCount { get; private set; }
+
         public static async Task<T> Call<T>(Func<Task<T>> requestFunc)
         {
             return await ExecuteWithRetries(async () => await requestFunc());
@@ -24,6 +26,8 @@ namespace Playlist_Merger.Helpers
                     {
                         break;
                     }
+
+                    RequestCount++;
                     response = await spotifyClient.NextPage(response);
                 }
 
@@ -38,6 +42,7 @@ namespace Playlist_Merger.Helpers
             {
                 try
                 {
+                    RequestCount++;
                     return await func();
                 }
                 catch (APITooManyRequestsException rateLimitEx)

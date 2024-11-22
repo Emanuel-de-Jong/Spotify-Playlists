@@ -9,10 +9,12 @@ namespace Playlist_Merger
     {
         private ISerializer serializer;
         private IDeserializer deserializer;
-        private Playlists oldMixPlaylists = [];
-        private Playlists oldMergePlaylists = [];
+
         private SpotifyClient spotifyClient;
         private string userId;
+
+        private Playlists oldMixPlaylists = [];
+        private Playlists oldMergePlaylists = [];
         private Playlists mixPlaylists = [];
         private Playlists mergePlaylists;
 
@@ -53,6 +55,7 @@ namespace Playlist_Merger
             await UpdateMergePlaylists();
             SavePlaylists(mergePlaylists, "Merge-Playlists");
 
+            Console.WriteLine($"Request count: {SpotifyAPIHelper.RequestCount}");
             Console.WriteLine("Done!");
         }
 
