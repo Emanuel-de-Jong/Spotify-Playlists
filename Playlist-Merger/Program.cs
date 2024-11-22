@@ -208,9 +208,20 @@ namespace Playlist_Merger
         {
             foreach (Playlist mergePlaylist in mergePlaylists.Values)
             {
-                List<string> newTracks = mergePlaylist.Deps
-                    .SelectMany(dep => mixPlaylists[dep].Tracks)
-                    .ToList();
+                List<string>? newTracks = null;
+                if (mergePlaylist.IsInclusive)
+                {
+                    newTracks = mergePlaylist.Deps
+                        .SelectMany(dep => mixPlaylists[dep].Tracks)
+                        .ToList();
+                }
+                else
+                {
+                    newTracks = mixPlaylists
+                        .Where(p => !mergePlaylist.Deps.Contains(p.Key))
+                        .SelectMany(p => p.Value.Tracks)
+                        .ToList();
+                }
 
                 List<string> addedTracks = newTracks.Except(mergePlaylist.Tracks).ToList();
                 for (int i = 0; i < addedTracks.Count; i += 100)
