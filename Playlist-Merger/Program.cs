@@ -97,13 +97,17 @@ namespace Playlist_Merger
 
             if (refreshToken != null)
             {
-                AuthorizationCodeRefreshResponse response = await new OAuthClient().RequestToken(
-                    new AuthorizationCodeRefreshRequest(clientId, clientSecret, refreshToken));
-
-                if (!response.IsExpired)
+                try
                 {
+                    AuthorizationCodeRefreshResponse response = await new OAuthClient().RequestToken(
+                        new AuthorizationCodeRefreshRequest(clientId, clientSecret, refreshToken));
+
                     accessToken = response.AccessToken;
                     apiCredentials["RefreshToken"] = response.RefreshToken;
+                }
+                catch (APIUnauthorizedException)
+                {
+                    Console.WriteLine("Refresh token is invalid. Re-authentication is required.");
                 }
             }
 
@@ -114,11 +118,11 @@ namespace Playlist_Merger
                     clientId,
                     LoginRequest.ResponseType.Code)
                 {
-                    Scope = [Scopes.PlaylistModifyPrivate]
+                    Scope = [Scopes.PlaylistModifyPrivate, Scopes.PlaylistReadPrivate, Scopes.PlaylistReadCollaborative]
                 };
 
                 Uri uri = loginRequest.ToUri();
-                Console.WriteLine($"Login in and paste the uri here {uri}");
+                Console.WriteLine($"Login and paste the URI here: {uri}");
                 string responseUri = Console.ReadLine();
                 string code = responseUri.Split("code=")[1].Trim();
 
