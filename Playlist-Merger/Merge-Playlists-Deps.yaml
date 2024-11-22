@@ -1,4 +1,12 @@
+# All:
+#   IsInclusive: false
 Techno:
   Deps:
   - Techno
   - Ambient Techno
+# Trance:
+#   Deps:
+#   - Trance
+#   - Upbeat Vocal Trance
+#   - Downbeat Vocal Trance
+#   - Uplifting Trance
