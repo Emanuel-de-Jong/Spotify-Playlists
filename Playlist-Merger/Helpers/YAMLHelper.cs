@@ -41,10 +41,7 @@ namespace Playlist_Merger.Helpers
         public Dictionary<string, string> LoadCache()
         {
             Dictionary<string, string>? cache = Deserialize<Dictionary<string, string>>(CACHE_FILE_NAME);
-            if (cache == null)
-            {
-                cache = [];
-            }
+            cache ??= [];
             return cache;
         }
 
