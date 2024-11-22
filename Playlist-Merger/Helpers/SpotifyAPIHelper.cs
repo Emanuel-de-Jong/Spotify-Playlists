@@ -15,24 +15,21 @@ namespace Playlist_Merger.Helpers
 
         public static async Task<List<T>> CallPaginated<T>(Func<Task<Paging<T>>> requestFunc, SpotifyClient spotifyClient)
         {
-            return await ExecuteWithRetries(async () =>
+            List<T> allItems = [];
+
+            Paging<T> response = null;
+            await ExecuteWithRetries(async () => response = await requestFunc());
+            while (response != null)
             {
-                List<T> allItems = [];
-                Paging<T> response = await requestFunc();
-                while (response != null)
+                allItems.AddRange(response.Items);
+                if (response.Next == null)
                 {
-                    allItems.AddRange(response.Items);
-                    if (response.Next == null)
-                    {
-                        break;
-                    }
-
-                    RequestCount++;
-                    response = await spotifyClient.NextPage(response);
+                    break;
                 }
+                await ExecuteWithRetries(async () => response = await spotifyClient.NextPage(response));
+            }
 
-                return allItems;
-            });
+            return allItems;
         }
 
         private static async Task<TResult> ExecuteWithRetries<TResult>(Func<Task<TResult>> func)
