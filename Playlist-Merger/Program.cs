@@ -35,8 +35,8 @@ namespace Playlist_Merger
             Console.WriteLine("Creating Spotify client");
             await CreateSpotifyClient();
 
-            userId = (await SpotifyAPIHelper.Call(
-                () => spotifyClient.UserProfile.Current())).Id;
+            Console.WriteLine("Getting user id");
+            await GetUserId();
 
             Console.WriteLine("Fetching playlist metas");
             await FetchPlaylistMetas();
@@ -137,6 +137,23 @@ namespace Playlist_Merger
 
             yamlContent = serializer.Serialize(apiCredentials);
             File.WriteAllText("Spotify-API.yaml", yamlContent);
+        }
+
+        private async Task GetUserId()
+        {
+            if (File.Exists("Cache.yaml"))
+            {
+                string yamlContent = File.ReadAllText("Cache.yaml");
+                userId = deserializer.Deserialize<string>(yamlContent);
+            }
+            else
+            {
+                userId = (await SpotifyAPIHelper.Call(
+                    () => spotifyClient.UserProfile.Current())).Id;
+
+                string yamlContent = serializer.Serialize(userId);
+                File.WriteAllText($"Cache.yaml", yamlContent);
+            }
         }
 
         private async Task FetchPlaylistMetas()
