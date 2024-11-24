@@ -4,6 +4,11 @@ Techno:
   Deps:
   - Techno
   - Ambient Techno
+All Techno:
+  MergeDeps:
+  - Techno
+  Deps:
+  - Acid Techno
 # Trance:
 #   Deps:
 #   - Trance

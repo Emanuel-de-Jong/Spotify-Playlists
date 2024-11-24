@@ -7,18 +7,18 @@ namespace Playlist_Merger
 {
     public class Program
     {
-        private YAMLHelper yamlHelper = new();
-        private SpotifyAPIHelper spotifyAPIHelper = new();
+        private YAMLHelper? yamlHelper;
+        private SpotifyAPIHelper? spotifyAPIHelper;
 
-        private Dictionary<string, string> cache;
-        private Dictionary<string, string> apiCredentials;
-        private SpotifyClient spotifyClient;
+        private Dictionary<string, string>? cache;
+        private Dictionary<string, string>? apiCredentials;
+        private SpotifyClient? spotifyClient;
         private string? userId;
 
-        private Playlists oldMixPlaylists;
-        private Playlists oldMergePlaylists;
-        private Playlists mixPlaylists = [];
-        private Playlists mergePlaylists;
+        private Playlists? oldMixPlaylists;
+        private Playlists? oldMergePlaylists;
+        private Playlists? mixPlaylists;
+        private Playlists? mergePlaylists;
 
         private static void Main(string[] args)
         {
@@ -29,6 +29,10 @@ namespace Playlist_Merger
         {
             try
             {
+                yamlHelper = new();
+                spotifyAPIHelper = new();
+                mixPlaylists = [];
+
                 Console.WriteLine("Loading YAMLs");
                 LoadYAMLs();
 
@@ -40,6 +44,8 @@ namespace Playlist_Merger
 
                 Console.WriteLine("Fetching playlist metas");
                 await FetchPlaylistMetas(mixPlaylists, mergePlaylists);
+
+                UpdateDeps();
 
                 Console.WriteLine("Creating missing merge playlists");
                 await CreateMergePlaylists(mergePlaylists);
@@ -116,6 +122,26 @@ namespace Playlist_Merger
             }
         }
 
+        public void UpdateDeps()
+        {
+            foreach (Playlist mergePlaylist in mergePlaylists.Values)
+            {
+                if (!mergePlaylist.IsInclusive)
+                {
+                    mergePlaylist.Deps = mixPlaylists.Keys.Where(n => !mergePlaylist.Deps.Contains(n)).ToList();
+                    mergePlaylist.IsInclusive = true;
+                }
+            }
+
+            foreach (Playlist mergePlaylist in mergePlaylists.Values)
+            {
+                foreach (string mergeDep in mergePlaylist.MergeDeps)
+                {
+                    mergePlaylist.Deps.AddRange(mergePlaylists[mergeDep].Deps);
+                }
+            }
+        }
+
         public async Task CreateMergePlaylists(Playlists mergePlaylists)
         {
             foreach (KeyValuePair<string, Playlist> pair in mergePlaylists)
@@ -161,20 +187,9 @@ namespace Playlist_Merger
         {
             foreach (Playlist mergePlaylist in mergePlaylists.Values)
             {
-                List<string>? newTracks = null;
-                if (mergePlaylist.IsInclusive)
-                {
-                    newTracks = mergePlaylist.Deps
-                        .SelectMany(dep => mixPlaylists[dep].Tracks)
-                        .ToList();
-                }
-                else
-                {
-                    newTracks = mixPlaylists
-                        .Where(p => !mergePlaylist.Deps.Contains(p.Key))
-                        .SelectMany(p => p.Value.Tracks)
-                        .ToList();
-                }
+                List<string>? newTracks = mergePlaylist.Deps
+                    .SelectMany(dep => mixPlaylists[dep].Tracks)
+                    .ToList();
 
                 List<string> addedTracks = newTracks.Except(mergePlaylist.Tracks).ToList();
                 for (int i = 0; i < addedTracks.Count; i += 100)

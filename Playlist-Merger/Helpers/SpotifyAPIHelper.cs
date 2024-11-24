@@ -42,7 +42,7 @@ namespace Playlist_Merger.Helpers
                     clientId,
                     LoginRequest.ResponseType.Code)
                 {
-                    Scope = [Scopes.PlaylistModifyPrivate, Scopes.PlaylistReadPrivate, Scopes.PlaylistReadCollaborative]
+                    Scope = [Scopes.PlaylistReadPrivate, Scopes.PlaylistModifyPrivate]
                 };
 
                 Uri uri = loginRequest.ToUri();
