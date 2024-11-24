@@ -34,7 +34,11 @@ namespace Playlist_Merger
                 mixPlaylists = [];
 
                 Console.WriteLine("Loading YAMLs");
-                LoadYAMLs();
+                bool isSuccess = LoadYAMLs();
+                if (!isSuccess)
+                {
+                    return;
+                }
 
                 Console.WriteLine("Creating Spotify client");
                 await CreateSpotifyClient();
@@ -71,9 +75,14 @@ namespace Playlist_Merger
             Console.WriteLine("Done!");
         }
 
-        private void LoadYAMLs()
+        private bool LoadYAMLs()
         {
             cache = yamlHelper.LoadCache();
+            if (cache.ContainsKey("Problem"))
+            {
+                return false;
+            }
+
             mergePlaylists = yamlHelper.LoadMergePlaylistsDeps();
 
             oldMixPlaylists = yamlHelper.Deserialize<Playlists>(YAMLHelper.MIX_FILE_NAME);
@@ -81,6 +90,8 @@ namespace Playlist_Merger
 
             oldMergePlaylists = yamlHelper.Deserialize<Playlists>(YAMLHelper.MERGE_FILE_NAME);
             oldMergePlaylists ??= [];
+
+            return true;
         }
 
         private async Task CreateSpotifyClient()
@@ -212,12 +223,15 @@ namespace Playlist_Merger
             StringBuilder stringBuilder = new();
             string date = DateTime.Now.ToString("dd-MM-yy HH:mm");
             stringBuilder.AppendLine($"[{date}] {ex.GetType()}: {ex.Message}");
+            stringBuilder.AppendLine($"Requests: {spotifyAPIHelper?.RequestCount}");
             stringBuilder.AppendLine(ex.ToString());
             stringBuilder.AppendLine(ex.StackTrace);
 
             string errorMessage = stringBuilder.ToString();
             Console.WriteLine(errorMessage);
             File.AppendAllText("log.txt", errorMessage);
+
+            cache["Problem"] = "";
         }
     }
 }

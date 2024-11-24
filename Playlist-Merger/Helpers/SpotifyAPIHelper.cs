@@ -36,6 +36,8 @@ namespace Playlist_Merger.Helpers
 
             if (accessToken == null)
             {
+                throw new Exception("Login required.");
+
                 LoginRequest loginRequest = new(
                     redirectUri,
                     clientId,
