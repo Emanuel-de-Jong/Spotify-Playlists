@@ -7,6 +7,12 @@ namespace Playlist_Merger
 {
     public class Program
     {
+#if DEBUG
+        private bool isManual = true;
+#else
+        private bool isManual = false;
+#endif
+
         private YAMLHelper? yamlHelper;
         private SpotifyAPIHelper? spotifyAPIHelper;
 
@@ -22,13 +28,18 @@ namespace Playlist_Merger
 
         private static void Main(string[] args)
         {
-            new Program().Run().GetAwaiter().GetResult();
+            new Program().Run(args).GetAwaiter().GetResult();
         }
 
-        private async Task Run()
+        private async Task Run(string[] args)
         {
             try
             {
+                if (args.Length > 0 && args[0] == "manual")
+                {
+                    isManual = true;
+                }
+
                 yamlHelper = new();
                 spotifyAPIHelper = new();
                 mixPlaylists = [];
@@ -97,7 +108,7 @@ namespace Playlist_Merger
         private async Task CreateSpotifyClient()
         {
             apiCredentials = yamlHelper.Deserialize<Dictionary<string, string>>(YAMLHelper.SPOTIFY_API_FILE_NAME);
-            spotifyClient = await spotifyAPIHelper.CreateSpotifyClient(apiCredentials);
+            spotifyClient = await spotifyAPIHelper.CreateSpotifyClient(apiCredentials, isManual);
         }
 
         private async Task GetUserId()

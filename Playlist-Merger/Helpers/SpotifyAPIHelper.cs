@@ -11,7 +11,7 @@ namespace Playlist_Merger.Helpers
 
         private SpotifyClient spotifyClient;
 
-        public async Task<SpotifyClient> CreateSpotifyClient(Dictionary<string, string> apiCredentials)
+        public async Task<SpotifyClient> CreateSpotifyClient(Dictionary<string, string> apiCredentials, bool isManual)
         {
             string clientId = apiCredentials["ClientId"];
             string clientSecret = apiCredentials["ClientSecret"];
@@ -36,7 +36,10 @@ namespace Playlist_Merger.Helpers
 
             if (accessToken == null)
             {
-                throw new Exception("Login required.");
+                if (!isManual)
+                {
+                    throw new Exception("Login required.");
+                }
 
                 LoginRequest loginRequest = new(
                     redirectUri,
