@@ -27,7 +27,6 @@ namespace Playlist_Merger.Helpers
                         new AuthorizationCodeRefreshRequest(clientId, clientSecret, refreshToken));
 
                     accessToken = response.AccessToken;
-                    apiCredentials["RefreshToken"] = response.RefreshToken;
                 }
                 catch (APIUnauthorizedException)
                 {
