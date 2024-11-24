@@ -23,12 +23,12 @@ namespace Playlist_Merger.Helpers
         public void Serialize<T>(T obj, string fileName)
         {
             string yamlContent = serializer.Serialize(obj);
-            File.WriteAllText($"{fileName}.yaml", yamlContent);
+            File.WriteAllText($"{Program.BASE_PATH}{fileName}.yaml", yamlContent);
         }
 
         public T? Deserialize<T>(string fileName)
         {
-            string filePath = $"{fileName}.yaml";
+            string filePath = $"{Program.BASE_PATH}{fileName}.yaml";
             if (!File.Exists(filePath))
             {
                 return default;

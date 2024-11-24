@@ -7,6 +7,8 @@ namespace Playlist_Merger
 {
     public class Program
     {
+        public static readonly string BASE_PATH = AppContext.BaseDirectory + Path.DirectorySeparatorChar;
+
 #if DEBUG
         private bool isManual = true;
 #else
@@ -240,7 +242,7 @@ namespace Playlist_Merger
 
             string errorMessage = stringBuilder.ToString();
             Console.WriteLine(errorMessage);
-            File.AppendAllText("log.txt", errorMessage);
+            File.AppendAllText($"{BASE_PATH}log.txt", errorMessage);
 
             cache["Problem"] = "";
         }
