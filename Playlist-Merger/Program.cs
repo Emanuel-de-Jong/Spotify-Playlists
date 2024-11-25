@@ -156,14 +156,6 @@ namespace Playlist_Merger
                     mergePlaylist.IsInclusive = true;
                 }
             }
-
-            foreach (Playlist mergePlaylist in mergePlaylists.Values)
-            {
-                foreach (string mergeDep in mergePlaylist.MergeDeps)
-                {
-                    mergePlaylist.Deps.AddRange(mergePlaylists[mergeDep].Deps);
-                }
-            }
         }
 
         public async Task CreateMergePlaylists(Playlists mergePlaylists)
