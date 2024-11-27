@@ -79,6 +79,8 @@ namespace Playlist_Merger
             catch (Exception ex)
             {
                 HandleException(ex);
+                yamlHelper.SaveAll(cache, apiCredentials, null, null);
+                return;
             }
 
             Console.WriteLine("Saving changes locally");
