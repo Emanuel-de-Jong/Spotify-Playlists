@@ -130,6 +130,11 @@ namespace Playlist_Merger
                 () => spotifyClient.Playlists.CurrentUsers(request));
             foreach (FullPlaylist responsePlaylist in responsePlaylists)
             {
+                if (responsePlaylist == null)
+                {
+                    continue;
+                }
+
                 if (responsePlaylist.Owner.Id != userId)
                 {
                     continue;
